@@ -1,0 +1,24 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "DebugPrint",
+	"Description": "Blueprint Node for comfort printing debug info",
+	"Category": "Other",
+	"CreatedBy": "MoxAlehin",
+	"CreatedByURL": "",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "DebugPrint",
+			"Type": "UncookedOnly",
+			"LoadingPhase": "PreLoadingScreen"
+		}
+	]
+}
