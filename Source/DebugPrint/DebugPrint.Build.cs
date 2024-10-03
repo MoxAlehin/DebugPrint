@@ -24,7 +24,8 @@ public class DebugPrint : ModuleRules
 			"BlueprintGraph",
 			"KismetCompiler",
 			"GraphEditor",
-			"UnrealEd"
+			"UnrealEd",
+			"ToolMenus"
 		});
 	}
 }

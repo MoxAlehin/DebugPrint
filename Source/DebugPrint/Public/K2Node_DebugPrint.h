@@ -40,5 +40,5 @@ public:
     virtual void RemoveInputPin(UEdGraphPin* PinToRemove) override;
     
     virtual void PostReconstructNode() override;
-    virtual void ReallocatePinsDuringReconstruction(TArray<UEdGraphPin*>& OldPins);
+    virtual void ReallocatePinsDuringReconstruction(TArray<UEdGraphPin*>& OldPins) override;
 };

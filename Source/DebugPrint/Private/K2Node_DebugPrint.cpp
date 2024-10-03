@@ -142,6 +142,7 @@ void UK2Node_DebugPrint::NotifyPinConnectionListChanged(UEdGraphPin* Pin)
             Pin->PinType.PinCategory = UEdGraphSchema_K2::PC_Wildcard;
         }
     }
+    ReconstructNode();
 }
 
 void UK2Node_DebugPrint::ExpandNode(class FKismetCompilerContext& CompilerContext, UEdGraph* SourceGraph)
@@ -167,6 +168,46 @@ void UK2Node_DebugPrint::AddInputPin()
 bool UK2Node_DebugPrint::CanAddPin() const
 {
     return true;  // Нода поддерживает кнопку "Add Pin"
+}
+
+void UK2Node_DebugPrint::RemoveInputPin(UEdGraphPin* PinToRemove)
+{
+    if (!PinToRemove || !Pins.Contains(PinToRemove))
+    {
+        return;
+    }
+
+    // Открываем транзакцию для поддержки undo/redo
+    FScopedTransaction Transaction(LOCTEXT("RemovePinTx", "Remove Pin"));
+    Modify();
+
+    // Разрываем все соединения перед удалением пина
+    PinToRemove->BreakAllPinLinks();
+
+    // Удаляем пин из массива
+    Pins.Remove(PinToRemove);
+
+    // Уменьшаем количество пинов
+    NumValuePins--;
+
+    // Пересчитываем имена оставшихся пинов
+    int32 Index = 0;
+    for (UEdGraphPin* Pin : Pins)
+    {
+        if (Pin->PinName.ToString().StartsWith(TEXT("Value_")))
+        {
+            // Переименовываем оставшиеся пины
+            Pin->Modify();
+            Pin->PinName = FName(*FString::Printf(TEXT("Value_%d"), Index));
+            Index++;
+        }
+    }
+
+    // Перестраиваем ноду
+    ReconstructNode();
+
+    // Уведомляем Blueprint о том, что нода была изменена
+    FBlueprintEditorUtils::MarkBlueprintAsModified(GetBlueprint());
 }
 
 void UK2Node_DebugPrint::PostReconstructNode()
@@ -218,6 +259,20 @@ void UK2Node_DebugPrint::ReallocatePinsDuringReconstruction(TArray<UEdGraphPin*>
 void UK2Node_DebugPrint::GetNodeContextMenuActions(UToolMenu* Menu, UGraphNodeContextMenuContext* Context) const
 {
     Super::GetNodeContextMenuActions(Menu, Context);
+
+    // Проверяем, является ли пин пином значений (Value)
+    if (Context && Context->Pin && Context->Pin->PinName.ToString().StartsWith(TEXT("Value_")))
+    {
+        // Добавляем действие "Remove Pin"
+        FToolMenuSection& Section = Menu->AddSection("K2NodeDebugPrint", LOCTEXT("RemovePinHeader", "Remove Pin"));
+        Section.AddMenuEntry(
+            "RemovePin",
+            LOCTEXT("RemovePin", "Remove Pin"),
+            LOCTEXT("RemovePinTooltip", "Remove this input pin."),
+            FSlateIcon(),
+            FUIAction(FExecuteAction::CreateUObject(const_cast<UK2Node_DebugPrint*>(this), &UK2Node_DebugPrint::RemoveInputPin, const_cast<UEdGraphPin*>(Context->Pin)))
+        );
+    }
 }
 
 FText UK2Node_DebugPrint::GetTooltipText() const
