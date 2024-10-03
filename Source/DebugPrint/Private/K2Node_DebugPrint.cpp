@@ -169,6 +169,52 @@ bool UK2Node_DebugPrint::CanAddPin() const
     return true;  // Нода поддерживает кнопку "Add Pin"
 }
 
+void UK2Node_DebugPrint::PostReconstructNode()
+{
+    // Восстановление типов данных на основе подключений
+    for (UEdGraphPin* Pin : Pins)
+    {
+        if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Wildcard && Pin->LinkedTo.Num() > 0)
+        {
+            Pin->PinType = Pin->LinkedTo[0]->PinType;
+        }
+    }
+
+    Super::PostReconstructNode();
+}
+
+void UK2Node_DebugPrint::ReallocatePinsDuringReconstruction(TArray<UEdGraphPin*>& OldPins)
+{
+    // Вызов базовой реализации метода
+    Super::ReallocatePinsDuringReconstruction(OldPins);
+
+    // Очищаем существующие пины
+    Pins.Empty();
+
+    // Повторное создание всех пинов
+    AllocateDefaultPins();
+
+    // Сопоставляем старые пины с новыми и восстанавливаем их типы данных
+    for (UEdGraphPin* OldPin : OldPins)
+    {
+        UEdGraphPin* NewPin = FindPin(OldPin->PinName);
+        if (NewPin && NewPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Wildcard)
+        {
+            // Если это wildcard пин, восстанавливаем его тип
+            NewPin->PinType = OldPin->PinType;
+
+            // Восстанавливаем соединения
+            for (UEdGraphPin* LinkedPin : OldPin->LinkedTo)
+            {
+                NewPin->MakeLinkTo(LinkedPin);
+            }
+        }
+    }
+
+    // Уведомляем Blueprint редактор об изменениях
+    GetGraph()->NotifyGraphChanged();
+}
+
 void UK2Node_DebugPrint::GetNodeContextMenuActions(UToolMenu* Menu, UGraphNodeContextMenuContext* Context) const
 {
     Super::GetNodeContextMenuActions(Menu, Context);
