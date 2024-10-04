@@ -4,11 +4,8 @@
 #include "EdGraphSchema_K2.h"
 #include "EditorCategoryUtils.h"
 #include "BlueprintActionDatabaseRegistrar.h"
-#include "EdGraphUtilities.h"
-#include "GraphEditorSettings.h"
 #include "K2Node_CallFunction.h"
 #include "KismetCompiler.h"
-#include "Kismet/KismetMathLibrary.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 
@@ -27,6 +24,16 @@ void UK2Node_DebugPrint::AllocateDefaultPins()
     CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Exec, UEdGraphSchema_K2::PN_Execute);
     CreatePin(EGPD_Output, UEdGraphSchema_K2::PC_Exec, UEdGraphSchema_K2::PN_Then);
 
+    for(int32 i = 0; i < UserDefinedPins.Num(); i++)
+    {
+        FText DummyErrorMsg;
+        if ((!IsEditable() || CanCreateUserDefinedPin(UserDefinedPins[i]->PinType, UserDefinedPins[i]->DesiredPinDirection, DummyErrorMsg)) && !FindPin(UserDefinedPins[i]->PinName))
+        {
+            UserDefinedPins.RemoveAt(i);
+            NumValuePins++;
+        }
+    }
+    
     // Value Wildcard Pins
     for (int32 i = 0; i < NumValuePins; i++)
     {
@@ -45,6 +52,11 @@ void UK2Node_DebugPrint::AllocateDefaultPins()
     KeyPin->bAdvancedView = true;
     KeyPin->DefaultValue = TEXT("None");
     KeyPin->PinToolTip = TEXT("If a non-empty key is provided, the message will replace any existing on-screen messages with the same key.");
+
+    UEdGraphPin* SeparatorPin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_String, TEXT("Separator"));
+    SeparatorPin->bAdvancedView = true;
+    SeparatorPin->DefaultValue = TEXT(" ");
+    SeparatorPin->PinToolTip = TEXT("The string used to separate each value.");
 
     UEdGraphPin* PrintToScreenPin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Boolean, TEXT("bPrintToScreen"));
     PrintToScreenPin->bAdvancedView = true;
