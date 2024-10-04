@@ -5,17 +5,46 @@
 #include "EditorCategoryUtils.h"
 #include "BlueprintActionDatabaseRegistrar.h"
 #include "K2Node_CallFunction.h"
+#include "K2Node_MakeArray.h"
 #include "KismetCompiler.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 
 #define LOCTEXT_NAMESPACE "K2Node"
 
+class UK2Node_MakeArray;
 class UGraphEditorSettings;
 
-namespace
+void UK2Node_DebugPrint::ArrayDebugPrint(
+    const UObject* WorldContextObject,
+    const TArray<FString>& Values,
+    bool bReplace, FName Key,
+    const FString& Separator,
+    bool bPrintToScreen,
+    bool bPrintToLog, 
+    FLinearColor TextColor,
+    float Duration,
+    const FString& NodeGUIDString)
 {
-// static const FName LessPinName(TEXT("Less"));
+    // 1. Собираем строку через Join String Array
+    FString InString = FString::Join(Values, *Separator);
+
+    // 2. Если Replace == true, конвертируем GUID в строку и в Name
+    if (bReplace)
+    {
+        Key = FName(NodeGUIDString);
+    }
+
+    // Используем UKismetSystemLibrary::PrintString для вывода на экран и в лог
+    UKismetSystemLibrary::PrintString(
+        WorldContextObject,
+        InString,
+        bPrintToLog,
+        bPrintToScreen,
+        TextColor,
+        Duration,
+        Key
+    );
 }
 
 void UK2Node_DebugPrint::AllocateDefaultPins()
@@ -57,6 +86,11 @@ void UK2Node_DebugPrint::AllocateDefaultPins()
     SeparatorPin->bAdvancedView = true;
     SeparatorPin->DefaultValue = TEXT(" ");
     SeparatorPin->PinToolTip = TEXT("The string used to separate each value.");
+
+    UEdGraphPin* NewLinePin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Boolean, TEXT("bNewLine"));
+    NewLinePin->bAdvancedView = true;
+    NewLinePin->DefaultValue = TEXT("true");
+    NewLinePin->PinToolTip = TEXT("Whether or not to print each value on a new line.");
 
     UEdGraphPin* PrintToScreenPin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Boolean, TEXT("bPrintToScreen"));
     PrintToScreenPin->bAdvancedView = true;
@@ -114,22 +148,61 @@ void UK2Node_DebugPrint::ExpandNode(class FKismetCompilerContext& CompilerContex
 
     const UEdGraphSchema_K2* Schema = CompilerContext.GetSchema();
     bool bIsErrorFree = true;
+
+    // 1. Создаем промежуточную ноду MakeArray
+    UK2Node_MakeArray* MakeArrayNode = CompilerContext.SpawnIntermediateNode<UK2Node_MakeArray>(this, SourceGraph);
+    TArray<UEdGraphPin*> ValuePins = GetValuePins();
+    MakeArrayNode->NumInputs = ValuePins.Num();
+    MakeArrayNode->AllocateDefaultPins();
     
-    UK2Node_CallFunction* PrintStringNode = CompilerContext.SpawnIntermediateNode<UK2Node_CallFunction>(this, SourceGraph);
-    PrintStringNode->FunctionReference.SetExternalMember(GET_FUNCTION_NAME_CHECKED(UKismetSystemLibrary, PrintString), UKismetSystemLibrary::StaticClass());
-    PrintStringNode->AllocateDefaultPins();
-
-    UEdGraphPin* ExecPin = FindPinChecked(UEdGraphSchema_K2::PN_Execute);
-    UEdGraphPin* ThenPin = FindPinChecked(UEdGraphSchema_K2::PN_Then);
+    // 2. Создаем промежуточную ноду для вызова функции ArrayDebugPrint
+    UK2Node_CallFunction* DebugPrintNode = CompilerContext.SpawnIntermediateNode<UK2Node_CallFunction>(this, SourceGraph);
+    DebugPrintNode->FunctionReference.SetExternalMember(GET_FUNCTION_NAME_CHECKED(UK2Node_DebugPrint, ArrayDebugPrint), UK2Node_DebugPrint::StaticClass());
+    DebugPrintNode->AllocateDefaultPins();
     
-    UEdGraphPin* PrintStringExecPin = PrintStringNode->FindPinChecked(UEdGraphSchema_K2::PN_Execute);
-    UEdGraphPin* PrintStringThenPin = PrintStringNode->FindPinChecked(UEdGraphSchema_K2::PN_Then);
+    // 3. Получаем пины функции ArrayDebugPrint
+    UEdGraphPin* ValuesPin = DebugPrintNode->FindPin(TEXT("Values"));
+    UEdGraphPin* ReplacePin = DebugPrintNode->FindPin(TEXT("bReplace"));
+    UEdGraphPin* KeyPin = DebugPrintNode->FindPin(TEXT("Key"));
+    UEdGraphPin* SeparatorPin = DebugPrintNode->FindPin(TEXT("Separator"));
+    UEdGraphPin* PrintToScreenPin = DebugPrintNode->FindPin(TEXT("bPrintToScreen"));
+    UEdGraphPin* PrintToLogPin = DebugPrintNode->FindPin(TEXT("bPrintToLog"));
+    UEdGraphPin* TextColorPin = DebugPrintNode->FindPin(TEXT("TextColor"));
+    UEdGraphPin* DurationPin = DebugPrintNode->FindPin(TEXT("Duration"));
+    UEdGraphPin* NodeGuidPin = DebugPrintNode->FindPin(TEXT("NodeGUIDString"));
 
-    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*ExecPin, *PrintStringExecPin).CanSafeConnect();
-    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*PrintStringThenPin, *ThenPin).CanSafeConnect();
+    // 4. Соединяем пин с результатом MakeArray с пином Values
+    bIsErrorFree &= Schema->TryCreateConnection(MakeArrayNode->GetOutputPin(), ValuesPin);
+    
+    // 5. Соединяем Value пины с пинами MakeArray
+    TArray<UEdGraphPin*> MakeArrayPins;
+    TArray<UEdGraphPin*> MakeArrayOutputPins;
+    MakeArrayNode->GetKeyAndValuePins(MakeArrayPins, MakeArrayOutputPins);
 
-    // bIsErrorFree &= Schema->TryCreateConnection(ExecPin, PrintStringExecPin);
-    // bIsErrorFree &= Schema->TryCreateConnection(PrintStringThenPin, ThenPin);
+    for (int32 i = 0; i < ValuePins.Num(); i++)
+    {
+        // bIsErrorFree &= Schema->TryCreateConnection(ValuePins[i], MakeArrayPins[i]);
+        bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*ValuePins[i], *MakeArrayPins[i]).CanSafeConnect();;
+    }
+
+    // 6. Подключаем exec пины
+    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*GetExecPin(), *DebugPrintNode->GetExecPin()).CanSafeConnect();
+    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*GetThenPin(), *DebugPrintNode->GetThenPin()).CanSafeConnect();
+
+    // Подключаем остальные параметры
+    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("bReplace")), *ReplacePin).CanSafeConnect();
+    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("Key")), *KeyPin).CanSafeConnect();
+    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("Separator")), *SeparatorPin).CanSafeConnect();
+    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("bPrintToScreen")), *PrintToScreenPin).CanSafeConnect();
+    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("bPrintToLog")), *PrintToLogPin).CanSafeConnect();
+    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("TextColor")), *TextColorPin).CanSafeConnect();
+    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("Duration")), *DurationPin).CanSafeConnect();
+
+    // Устанавливаем значение NodeGUID как значение по умолчанию для соответствующего пина
+    NodeGuidPin->DefaultValue = NodeGuid.ToString();
+
+    // bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*PrintStringThenPin, *ThenPin).CanSafeConnect(); // Connecting default allocated pins
+    // bIsErrorFree &= Schema->TryCreateConnection(PrintStringThenPin, ThenPin); // Connecting only inner Node with each other
     
     if (!bIsErrorFree)
     {
@@ -293,6 +366,22 @@ void UK2Node_DebugPrint::ChangePinType(UEdGraphPin* Pin)
 bool UK2Node_DebugPrint::CanChangePinType(UEdGraphPin* Pin) const
 {
     return true;
+}
+
+TArray<UEdGraphPin*> UK2Node_DebugPrint::GetValuePins() const
+{
+    TArray<UEdGraphPin*> ValuePins;
+
+    for (UEdGraphPin* Pin : Pins)
+    {
+        // Проверяем, является ли пин "Value_" пином
+        if (Pin->PinName.ToString().StartsWith(TEXT("Value_")))
+        {
+            ValuePins.Add(Pin);
+        }
+    }
+
+    return ValuePins;
 }
 
 void UK2Node_DebugPrint::GetNodeContextMenuActions(UToolMenu* Menu, UGraphNodeContextMenuContext* Context) const

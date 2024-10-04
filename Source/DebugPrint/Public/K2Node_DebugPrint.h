@@ -17,6 +17,20 @@ public:
     UPROPERTY()
     int32 NumValuePins;
 
+	UFUNCTION(BlueprintCallable, Category = "Debug")
+	static void ArrayDebugPrint(
+		const UObject* WorldContextObject,
+		const TArray<FString>& Values,
+		bool bReplace,
+		FName Key,
+		const FString& Separator,
+		bool bPrintToScreen,
+		bool bPrintToLog,
+		FLinearColor TextColor,
+		float Duration,
+		const FString& NodeGuidString
+	);
+
     //~ Begin UEdGraphNode Interface
     virtual void AllocateDefaultPins() override;
     virtual FText GetTooltipText() const override;
@@ -47,6 +61,7 @@ public:
     virtual UEdGraphPin* CreatePinFromUserDefinition(const TSharedPtr<FUserPinInfo> NewPinInfo) override;
     virtual bool CanCreateUserDefinedPin(const FEdGraphPinType& InPinType, EEdGraphPinDirection InDesiredDirection, FText& OutErrorMessage) override;
     // End of UK2Node_EditablePinBase Interface
+	TArray<UEdGraphPin*> GetValuePins() const;
     
 private:
     void ResetPinToWildcard(UEdGraphPin* PinToReset);
