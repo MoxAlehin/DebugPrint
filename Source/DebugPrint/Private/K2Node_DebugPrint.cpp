@@ -380,6 +380,13 @@ void UK2Node_DebugPrint::ResetPinToWildcard(UEdGraphPin* PinToReset)
     FScopedTransaction Transaction(LOCTEXT("ResetPinToWildcardTx", "Reset Pin to Wildcard"));
     Modify();
 
+    const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
+    
+    // Если пин дочерний то его нужно Recombine
+    UEdGraphPin* ParentPin = PinToReset->ParentPin ? PinToReset->ParentPin : PinToReset;
+    Schema->RecombinePin(PinToReset);
+    PinToReset = ParentPin;
+
     // Меняем тип пина на Wildcard
     PinToReset->PinType.PinCategory = UEdGraphSchema_K2::PC_Wildcard;
     PinToReset->PinType.PinSubCategory = NAME_None;
