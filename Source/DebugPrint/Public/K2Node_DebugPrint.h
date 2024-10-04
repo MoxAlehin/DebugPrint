@@ -24,6 +24,7 @@ public:
 		bool bReplace,
 		FName Key,
 		const FString& Separator,
+		bool bNewLine,
 		bool bPrintToScreen,
 		bool bPrintToLog,
 		FLinearColor TextColor,
@@ -50,17 +51,31 @@ public:
     virtual void ReallocatePinsDuringReconstruction(TArray<UEdGraphPin*>& OldPins) override;
     // End of Begin UK2Node Interface
 
+	//~ Begin UK2Node_EditablePinBase Interface
+	virtual bool ShouldUseConstRefParams() const override { return true; }
+	virtual UEdGraphPin* CreatePinFromUserDefinition(const TSharedPtr<FUserPinInfo> NewPinInfo) override;
+	virtual bool CanCreateUserDefinedPin(const FEdGraphPinType& InPinType, EEdGraphPinDirection InDesiredDirection, FText& OutErrorMessage) override;
+	// End of UK2Node_EditablePinBase Interface
+	
     //~ Begin IK2Node_AddPinInterface
     virtual void AddInputPin() override;
     virtual bool CanAddPin() const override;
     virtual void RemoveInputPin(UEdGraphPin* PinToRemove) override;
     // End of IK2Node_AddPinInterface
+	
+    /**
+     * Notification from the editor that the user wants to change the PinType on a selected pin
+     *
+     * @param Pin	The pin the user wants to change the type for
+     */
+    void ChangePinType(UEdGraphPin* Pin);
+    /**
+     * Whether the user can change the pintype on a selected pin
+     *
+     * @param Pin	The pin in question
+     */
+    bool CanChangePinType(UEdGraphPin* Pin) const;
 
-    //~ Begin UK2Node_EditablePinBase Interface
-    virtual bool ShouldUseConstRefParams() const override { return true; }
-    virtual UEdGraphPin* CreatePinFromUserDefinition(const TSharedPtr<FUserPinInfo> NewPinInfo) override;
-    virtual bool CanCreateUserDefinedPin(const FEdGraphPinType& InPinType, EEdGraphPinDirection InDesiredDirection, FText& OutErrorMessage) override;
-    // End of UK2Node_EditablePinBase Interface
 	TArray<UEdGraphPin*> GetValuePins() const;
     
 private:

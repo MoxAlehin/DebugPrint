@@ -18,33 +18,64 @@ class UGraphEditorSettings;
 void UK2Node_DebugPrint::ArrayDebugPrint(
     const UObject* WorldContextObject,
     const TArray<FString>& Values,
-    bool bReplace, FName Key,
+    bool bReplace,
+    FName Key,
     const FString& Separator,
+    bool bNewLine,
     bool bPrintToScreen,
-    bool bPrintToLog, 
+    bool bPrintToLog,
     FLinearColor TextColor,
     float Duration,
     const FString& NodeGUIDString)
 {
-    // 1. Собираем строку через Join String Array
-    FString InString = FString::Join(Values, *Separator);
-
-    // 2. Если Replace == true, конвертируем GUID в строку и в Name
-    if (bReplace)
+    if (bNewLine)
     {
-        Key = FName(NodeGUIDString);
-    }
+        for (int32 i = 0; i < Values.Num(); ++i)
+        {
+            FString Value = Values[i];
+            FName UniqueKey = Key;
+            
+            // Если Replace == true, используем GUID с индексом
+            if (bReplace)
+            {
+                FString UniqueKeyString = FString::Printf(TEXT("%s_%d"), *NodeGUIDString, i);
+                UniqueKey = FName(*UniqueKeyString);
+            }
 
-    // Используем UKismetSystemLibrary::PrintString для вывода на экран и в лог
-    UKismetSystemLibrary::PrintString(
-        WorldContextObject,
-        InString,
-        bPrintToLog,
-        bPrintToScreen,
-        TextColor,
-        Duration,
-        Key
-    );
+            // Печатаем каждое значение по отдельности
+            UKismetSystemLibrary::PrintString(
+                WorldContextObject,
+                Value,
+                bPrintToLog,
+                bPrintToScreen,
+                TextColor,
+                Duration,
+                UniqueKey
+            );
+        }
+    }
+    else
+    {
+        // 1. Собираем строку через Join String Array
+        FString InString = FString::Join(Values, *Separator);
+
+        // 2. Если Replace == true, конвертируем GUID в строку и в Name
+        if (bReplace)
+        {
+            Key = FName(NodeGUIDString);
+        }
+
+        // Используем UKismetSystemLibrary::PrintString для вывода на экран и в лог
+        UKismetSystemLibrary::PrintString(
+            WorldContextObject,
+            InString,
+            bPrintToLog,
+            bPrintToScreen,
+            TextColor,
+            Duration,
+            Key
+        );
+    }
 }
 
 void UK2Node_DebugPrint::AllocateDefaultPins()
@@ -165,6 +196,7 @@ void UK2Node_DebugPrint::ExpandNode(class FKismetCompilerContext& CompilerContex
     UEdGraphPin* ReplacePin = DebugPrintNode->FindPin(TEXT("bReplace"));
     UEdGraphPin* KeyPin = DebugPrintNode->FindPin(TEXT("Key"));
     UEdGraphPin* SeparatorPin = DebugPrintNode->FindPin(TEXT("Separator"));
+    UEdGraphPin* NewLinePin = DebugPrintNode->FindPin(TEXT("bNewLine"));
     UEdGraphPin* PrintToScreenPin = DebugPrintNode->FindPin(TEXT("bPrintToScreen"));
     UEdGraphPin* PrintToLogPin = DebugPrintNode->FindPin(TEXT("bPrintToLog"));
     UEdGraphPin* TextColorPin = DebugPrintNode->FindPin(TEXT("TextColor"));
@@ -193,6 +225,7 @@ void UK2Node_DebugPrint::ExpandNode(class FKismetCompilerContext& CompilerContex
     bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("bReplace")), *ReplacePin).CanSafeConnect();
     bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("Key")), *KeyPin).CanSafeConnect();
     bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("Separator")), *SeparatorPin).CanSafeConnect();
+    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("bNewLine")), *NewLinePin).CanSafeConnect();
     bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("bPrintToScreen")), *PrintToScreenPin).CanSafeConnect();
     bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("bPrintToLog")), *PrintToLogPin).CanSafeConnect();
     bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("TextColor")), *TextColorPin).CanSafeConnect();
@@ -365,6 +398,8 @@ void UK2Node_DebugPrint::ChangePinType(UEdGraphPin* Pin)
 
 bool UK2Node_DebugPrint::CanChangePinType(UEdGraphPin* Pin) const
 {
+    // Разрешаем изменение типа только для Value пинов
+    // return Pin && Pin->PinName.ToString().StartsWith(TEXT("Value_"));
     return true;
 }
 
