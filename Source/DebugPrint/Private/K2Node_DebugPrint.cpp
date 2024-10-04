@@ -213,9 +213,6 @@ void UK2Node_DebugPrint::PostReconstructNode()
 
 void UK2Node_DebugPrint::ReallocatePinsDuringReconstruction(TArray<UEdGraphPin*>& OldPins)
 {
-    // Вызов базовой реализации метода
-    Super::ReallocatePinsDuringReconstruction(OldPins);
-
     // Очищаем существующие пины
     Pins.Empty();
 
@@ -238,6 +235,8 @@ void UK2Node_DebugPrint::ReallocatePinsDuringReconstruction(TArray<UEdGraphPin*>
             }
         }
     }
+    
+    RestoreSplitPins(OldPins);
 
     // Уведомляем Blueprint редактор об изменениях
     GetGraph()->NotifyGraphChanged();
