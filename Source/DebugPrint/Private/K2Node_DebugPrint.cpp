@@ -262,15 +262,38 @@ UEdGraphPin* UK2Node_DebugPrint::CreatePinFromUserDefinition(const TSharedPtr<FU
 bool UK2Node_DebugPrint::CanCreateUserDefinedPin(const FEdGraphPinType& InPinType,
     EEdGraphPinDirection InDesiredDirection, FText& OutErrorMessage)
 {
-    // Разрешаем добавлять только Input пины
-    if (InDesiredDirection == EGPD_Input)
+    // Запрещаем добавление Output пинов
+    if (InDesiredDirection == EGPD_Output)
     {
-        return true;
+        OutErrorMessage = LOCTEXT("OutputPinNotAllowed", "Cannot add Output pins!");
+        return false;
     }
-    
-    // Запрещаем Output и Exec пины
-    OutErrorMessage = LOCTEXT("AddInputPinError", "Cannot add this type of pin!");
-    return false;
+
+    // Запрещаем добавление Exec пинов
+    if (InPinType.PinCategory == UEdGraphSchema_K2::PC_Exec)
+    {
+        OutErrorMessage = LOCTEXT("ExecPinNotAllowed", "Cannot add Exec pins!");
+        return false;
+    }
+        
+    // Запрещаем добавление Map, Array и Set пинов
+    if (InPinType.IsContainer())
+    {
+        OutErrorMessage = LOCTEXT("ContainerTypeNotAllowed", "Cannot add Map, Array or Set pins!");
+        return false;
+    }
+
+    // По умолчанию разрешаем добавление пина
+    return true;
+}
+
+void UK2Node_DebugPrint::ChangePinType(UEdGraphPin* Pin)
+{
+}
+
+bool UK2Node_DebugPrint::CanChangePinType(UEdGraphPin* Pin) const
+{
+    return true;
 }
 
 void UK2Node_DebugPrint::GetNodeContextMenuActions(UToolMenu* Menu, UGraphNodeContextMenuContext* Context) const
