@@ -23,17 +23,20 @@ void UK2Node_DebugPrint::ArrayDebugPrint(
     const FString& Separator,
     bool bNewLine,
     bool bPrintLabel,
+    const FString SourceValueLabels,
     bool bPrintToScreen,
     bool bPrintToLog,
     FLinearColor TextColor,
     float Duration,
     const FString& NodeGUIDString)
 {
+    TArray<FString> ValueLabels;
+    SourceValueLabels.ParseIntoArray(ValueLabels, TEXT(" "));
     if (bNewLine)
     {
         for (int32 i = 0; i < Values.Num(); ++i)
         {
-            FString Value = Values[i];
+            FString Value = ValueLabels[i] + ": " + Values[i];
             FName UniqueKey = Key;
             
             // Если Replace == true, используем GUID с индексом
@@ -58,7 +61,14 @@ void UK2Node_DebugPrint::ArrayDebugPrint(
     else
     {
         // 1. Собираем строку через Join String Array
-        FString InString = FString::Join(Values, *Separator);
+        TArray<FString> ActualValues;
+        
+        for (int32 i = 0; i < Values.Num(); ++i)
+        {
+            ActualValues.Add(bPrintLabel ? ValueLabels[i] + ": " + Values[i] : Values[i]);
+        }
+        
+        FString InString = FString::Join(ActualValues, *Separator);
 
         // 2. Если Replace == true, конвертируем GUID в строку и в Name
         if (bReplace)
@@ -96,23 +106,14 @@ void UK2Node_DebugPrint::AllocateDefaultPins()
     // Execs
     CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Exec, UEdGraphSchema_K2::PN_Execute);
     CreatePin(EGPD_Output, UEdGraphSchema_K2::PC_Exec, UEdGraphSchema_K2::PN_Then);
-
-    for(int32 i = 0; i < UserDefinedPins.Num(); i++)
-    {
-        FText DummyErrorMsg;
-        if ((!IsEditable() || CanCreateUserDefinedPin(UserDefinedPins[i]->PinType, UserDefinedPins[i]->DesiredPinDirection, DummyErrorMsg)) && !FindPin(UserDefinedPins[i]->PinName))
-        {
-            UserDefinedPins.RemoveAt(i);
-            NumValuePins++;
-        }
-    }
     
     // Value Wildcard Pins
-    for (int32 i = 0; i < NumValuePins; i++)
+    for (int32 i = 0; i < ValueLabels.Num(); ++i)
     {
         FName PinName = FName(*FString::Printf(TEXT("Value_%d"), i));
         UEdGraphPin* WildcardPin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Wildcard, PinName);
         WildcardPin->PinToolTip = TEXT("Wildcard input pin. Type will be determined by what is connected.");
+        WildcardPin->PinFriendlyName = FText::FromString(ValueLabels[i]);
     }
 
     // Print String Options
@@ -149,7 +150,7 @@ void UK2Node_DebugPrint::AllocateDefaultPins()
     UEdGraphPin* TextColorPin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Struct, TEXT("TextColor"));
     TextColorPin->PinType.PinSubCategoryObject = TBaseStructure<FLinearColor>::Get();
     TextColorPin->bAdvancedView = true;
-    TextColorPin->DefaultValue = TEXT("(R=0.500000,G=0.000000,B=0.500000,A=1.000000)");
+    TextColorPin->DefaultValue = TEXT("(R=0.000000,G=0.666666,B=1.000000,A=1.000000)");
     TextColorPin->PinToolTip = TEXT("The color of the text to display.");
 
     UEdGraphPin* DurationPin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Real, TEXT("Duration"));
@@ -165,6 +166,11 @@ void UK2Node_DebugPrint::AllocateDefaultPins()
 void UK2Node_DebugPrint::NotifyPinConnectionListChanged(UEdGraphPin* Pin)
 {
     Super::NotifyPinConnectionListChanged(Pin);
+
+    if (!Pin) // Проверяем, что пин не nullptr
+    {
+        return;
+    }
 
     // Проверяем, что пин является Wildcard и имеет подключение
     if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Wildcard)
@@ -215,6 +221,7 @@ void UK2Node_DebugPrint::ExpandNode(class FKismetCompilerContext& CompilerContex
     UEdGraphPin* TextColorPin = DebugPrintNode->FindPin(TEXT("TextColor"));
     UEdGraphPin* DurationPin = DebugPrintNode->FindPin(TEXT("Duration"));
     UEdGraphPin* NodeGuidPin = DebugPrintNode->FindPin(TEXT("NodeGUIDString"));
+    UEdGraphPin* SourceValueLabelsPin = DebugPrintNode->FindPin(TEXT("SourceValueLabels"));
 
     // 4. Соединяем пин с результатом MakeArray с пином Values
     bIsErrorFree &= Schema->TryCreateConnection(MakeArrayNode->GetOutputPin(), ValuesPin);
@@ -224,10 +231,18 @@ void UK2Node_DebugPrint::ExpandNode(class FKismetCompilerContext& CompilerContex
     TArray<UEdGraphPin*> MakeArrayOutputPins;
     MakeArrayNode->GetKeyAndValuePins(MakeArrayPins, MakeArrayOutputPins);
 
-    for (int32 i = 0; i < ValuePins.Num(); i++)
+    for (int32 i = 0; i < ValuePins.Num(); ++i)
     {
         // bIsErrorFree &= Schema->TryCreateConnection(ValuePins[i], MakeArrayPins[i]);
-        bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*ValuePins[i], *MakeArrayPins[i]).CanSafeConnect();;
+        if (!CompilerContext.MovePinLinksToIntermediate(*ValuePins[i], *MakeArrayPins[i]).CanSafeConnect())
+        {
+            bIsErrorFree &= Schema->TryCreateConnection(ValuePins[i], MakeArrayPins[i]);
+        }
+    }
+    
+    if (!bIsErrorFree)
+    {
+        CompilerContext.MessageLog.Error(*LOCTEXT("InternalConnectionErrorw", "зада ты всё равно лох. @@").ToString(), this);
     }
 
     // 6. Подключаем exec пины
@@ -246,9 +261,15 @@ void UK2Node_DebugPrint::ExpandNode(class FKismetCompilerContext& CompilerContex
 
     // Устанавливаем значение NodeGUID как значение по умолчанию для соответствующего пина
     NodeGuidPin->DefaultValue = NodeGuid.ToString();
-
-    // bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*PrintStringThenPin, *ThenPin).CanSafeConnect(); // Connecting default allocated pins
-    // bIsErrorFree &= Schema->TryCreateConnection(PrintStringThenPin, ThenPin); // Connecting only inner Node with each other
+    
+    FString SourceValueLabels = "";
+    for (int32 i = 0; i < ValueLabels.Num(); ++i)
+    {
+        SourceValueLabels += ValueLabels[i] == "" ? FString::Printf(TEXT("Value %d"), i) : ValueLabels[i];
+        SourceValueLabels += " ";
+    }
+    
+    SourceValueLabelsPin->DefaultValue = SourceValueLabels;
     
     if (!bIsErrorFree)
     {
@@ -262,7 +283,7 @@ void UK2Node_DebugPrint::AddInputPin()
 {
     Modify();
     
-    NumValuePins++;
+    ValueLabels.Add("");
     
     ReconstructNode();
 }
@@ -294,10 +315,14 @@ void UK2Node_DebugPrint::RemoveInputPin(UEdGraphPin* PinToRemove)
     Pins.Remove(PinToRemove);
 
     // Уменьшаем количество пинов
-    NumValuePins--;
+    FString Prefix = TEXT("Value_");
+    int32 Index = FCString::Atoi(*PinToRemove->PinName.ToString().RightChop(Prefix.Len()));
+    PinToRemove->PinName;
+    ValueLabels.RemoveAt(Index);
+    // NumValuePins--;
 
     // Пересчитываем имена оставшихся пинов
-    int32 Index = 0;
+    Index = 0;
     for (UEdGraphPin* Pin : Pins)
     {
         if (Pin->PinName.ToString().StartsWith(TEXT("Value_")))
@@ -363,17 +388,9 @@ void UK2Node_DebugPrint::ReallocatePinsDuringReconstruction(TArray<UEdGraphPin*>
 
 UEdGraphPin* UK2Node_DebugPrint::CreatePinFromUserDefinition(const TSharedPtr<FUserPinInfo> NewPinInfo)
 {
-    // Создаем новый Wildcard пин с типом, указанным в UserPinInfo
-    UEdGraphPin* NewPin = CreatePin(EGPD_Input, NewPinInfo->PinType, FName(*FString::Printf(TEXT("Value_%d"), NumValuePins)));
-
-    // Устанавливаем значение по умолчанию для пина
-    // const UEdGraphSchema_K2* K2Schema = GetDefault<UEdGraphSchema_K2>();
-    // K2Schema->SetPinAutogeneratedDefaultValue(NewPin, NewPinInfo->PinDefaultValue);
-    // ReconstructNode();
-    // Увеличиваем счетчик Value пинов (например, NumValuePins)
-    // NumValuePins++;
-
-    // Возвращаем новый пин
+    UEdGraphPin* NewPin = CreatePin(EGPD_Input, NewPinInfo->PinType, FName(*FString::Printf(TEXT("Value_%d"), ValueLabels.Num())));
+    ValueLabels.Add(NewPinInfo->PinName.ToString());
+    UserDefinedPins.RemoveAt(0);
     return NewPin;
 }
 
@@ -411,8 +428,6 @@ void UK2Node_DebugPrint::ChangePinType(UEdGraphPin* Pin)
 
 bool UK2Node_DebugPrint::CanChangePinType(UEdGraphPin* Pin) const
 {
-    // Разрешаем изменение типа только для Value пинов
-    // return Pin && Pin->PinName.ToString().StartsWith(TEXT("Value_"));
     return true;
 }
 

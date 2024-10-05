@@ -12,14 +12,10 @@ class DEBUGPRINT_API UK2Node_DebugPrint : public UK2Node_EditablePinBase, public
     GENERATED_BODY()
     
 public:
-    
-    /** The number of value options this node currently has */
-    UPROPERTY()
-    int32 NumValuePins;
 
 	// Добавляем массив строк
 	UPROPERTY(EditAnywhere, Category = "Settings") // Отображение массива строк в панели Details
-	TArray<FName> ValueLabels;  // Массив строк, который будет виден и редактируем в панели Details
+	TArray<FString> ValueLabels;  // Массив строк, который будет виден и редактируем в панели Details
 
 	UFUNCTION(BlueprintCallable, Category = "Debug")
 	static void ArrayDebugPrint(
@@ -30,6 +26,7 @@ public:
 		const FString& Separator,
 		bool bNewLine,
 		bool bPrintLabel,
+		const FString SourceValueLabels,
 		bool bPrintToScreen,
 		bool bPrintToLog,
 		FLinearColor TextColor,
