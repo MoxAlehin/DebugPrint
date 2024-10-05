@@ -17,6 +17,10 @@ public:
     UPROPERTY()
     int32 NumValuePins;
 
+	// Добавляем массив строк
+	UPROPERTY(EditAnywhere, Category = "Settings") // Отображение массива строк в панели Details
+	TArray<FName> ValueLabels;  // Массив строк, который будет виден и редактируем в панели Details
+
 	UFUNCTION(BlueprintCallable, Category = "Debug")
 	static void ArrayDebugPrint(
 		const UObject* WorldContextObject,
@@ -25,12 +29,17 @@ public:
 		FName Key,
 		const FString& Separator,
 		bool bNewLine,
+		bool bPrintLabel,
 		bool bPrintToScreen,
 		bool bPrintToLog,
 		FLinearColor TextColor,
 		float Duration,
 		const FString& NodeGuidString
 	);
+
+	// UObject interface
+	virtual void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
+	// End of UObject interface
 
     //~ Begin UEdGraphNode Interface
     virtual void AllocateDefaultPins() override;
@@ -39,6 +48,7 @@ public:
     virtual FText GetNodeTitle(ENodeTitleType::Type TitleType) const override;
     virtual FSlateIcon GetIconAndTint(FLinearColor& OutColor) const override;
     virtual FName GetCornerIcon() const override;
+	virtual bool ShouldShowNodeProperties() const override { return true; }
     //~ End of UEdGraphNode Interface
 
     //~ Begin UK2Node Interface

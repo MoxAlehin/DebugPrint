@@ -22,6 +22,7 @@ void UK2Node_DebugPrint::ArrayDebugPrint(
     FName Key,
     const FString& Separator,
     bool bNewLine,
+    bool bPrintLabel,
     bool bPrintToScreen,
     bool bPrintToLog,
     FLinearColor TextColor,
@@ -76,6 +77,18 @@ void UK2Node_DebugPrint::ArrayDebugPrint(
             Key
         );
     }
+}
+
+void UK2Node_DebugPrint::PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent)
+{
+    FName PropertyName = (PropertyChangedEvent.Property != nullptr) ? PropertyChangedEvent.Property->GetFName() : NAME_None;
+    if (PropertyName == TEXT("ValueLabels"))
+    {
+        ReconstructNode();
+    }
+    
+    Super::PostEditChangeProperty(PropertyChangedEvent);
+    GetGraph()->NotifyNodeChanged(this);
 }
 
 void UK2Node_DebugPrint::AllocateDefaultPins()
