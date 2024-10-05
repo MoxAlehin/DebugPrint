@@ -181,11 +181,6 @@ void UK2Node_DebugPrint::ExpandNode(class FKismetCompilerContext& CompilerContex
             bIsErrorFree &= Schema->TryCreateConnection(ValuePins[i], MakeArrayPins[i]);
         }
     }
-    
-    if (!bIsErrorFree)
-    {
-        CompilerContext.MessageLog.Error(*LOCTEXT("InternalConnectionErrorw", "зада ты всё равно лох. @@").ToString(), this);
-    }
 
     // 6. Подключаем exec пины
     bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*GetExecPin(), *DebugPrintNode->GetExecPin()).CanSafeConnect();
