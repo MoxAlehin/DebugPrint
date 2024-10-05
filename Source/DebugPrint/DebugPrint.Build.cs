@@ -4,7 +4,7 @@ using UnrealBuildTool;
 
 public class DebugPrint : ModuleRules
 {
-	public DebugPrint(ReadOnlyTargetRules Target) : base(Target)
+	public DebugPrint(ReadOnlyTargetRules target) : base(target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 		
@@ -25,7 +25,8 @@ public class DebugPrint : ModuleRules
 			"KismetCompiler",
 			"GraphEditor",
 			"UnrealEd",
-			"ToolMenus"
+			"ToolMenus",
+			"DeveloperSettings"
 		});
 	}
 }

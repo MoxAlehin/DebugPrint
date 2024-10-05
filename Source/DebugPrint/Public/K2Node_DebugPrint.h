@@ -6,6 +6,16 @@
 #include "K2Node_AddPinInterface.h"
 #include "K2Node_DebugPrint.generated.h"
 
+UENUM(BlueprintType)
+enum EPrintType : uint8
+{
+	PrintInColumns UMETA(DisplayName="Print In Columns", Tooltip="Prints each value in columns, aligning labels and keys."),
+	PrintLabels UMETA(DisplayName="Print With Labels", Tooltip="Prints each value with a label."),
+	PrintNewLine UMETA(DisplayName="Print With New Lines", Tooltip="Prints each value on a new line."),
+	PrintReplace UMETA(DisplayName="Print and Replace", Tooltip="Prints in one line but overwrites the content each time, even without overriding the key."),
+	PrintInline UMETA(DisplayName="Print Inline", Tooltip="Prints all content in one line like a standard print string.")
+};
+
 UCLASS()
 class DEBUGPRINT_API UK2Node_DebugPrint : public UK2Node_EditablePinBase, public IK2Node_AddPinInterface
 {
@@ -14,24 +24,20 @@ class DEBUGPRINT_API UK2Node_DebugPrint : public UK2Node_EditablePinBase, public
 public:
 
 	// Добавляем массив строк
-	UPROPERTY(EditAnywhere, Category = "Settings") // Отображение массива строк в панели Details
-	TArray<FString> ValueLabels;  // Массив строк, который будет виден и редактируем в панели Details
+	UPROPERTY(EditAnywhere, Category = "Settings")
+	TArray<FString> ValueLabels;
 
 	UFUNCTION(BlueprintCallable, Category = "Debug")
 	static void ArrayDebugPrint(
 		const UObject* WorldContextObject,
 		const TArray<FString>& Values,
-		bool bReplace,
 		FName Key,
 		const FString& Separator,
-		bool bNewLine,
-		bool bPrintLabel,
 		const FString SourceValueLabels,
-		bool bPrintToScreen,
-		bool bPrintToLog,
 		FLinearColor TextColor,
 		float Duration,
-		const FString& NodeGuidString
+		const FString& NodeGuidString,
+		TEnumAsByte<enum EPrintType> Type
 	);
 
 	// UObject interface

@@ -9,6 +9,7 @@
 #include "KismetCompiler.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Kismet2/BlueprintEditorUtils.h"
+#include "DebugPrintDeveloperSettings.h"
 
 #define LOCTEXT_NAMESPACE "K2Node"
 
@@ -18,91 +19,75 @@ class UGraphEditorSettings;
 void UK2Node_DebugPrint::ArrayDebugPrint(
     const UObject* WorldContextObject,
     const TArray<FString>& Values,
-    bool bReplace,
     FName Key,
     const FString& Separator,
-    bool bNewLine,
-    bool bPrintLabel,
     const FString SourceValueLabels,
-    bool bPrintToScreen,
-    bool bPrintToLog,
     FLinearColor TextColor,
     float Duration,
-    const FString& NodeGUIDString)
+    const FString& NodeGuidString,
+    TEnumAsByte<enum EPrintType> Type
+    )
 {
-    TArray<FString> ValueLabels;
-    SourceValueLabels.ParseIntoArray(ValueLabels, TEXT(" "));
-    if (bNewLine)
+    
+    if (Type == EPrintType::PrintInline || Type == EPrintType::PrintReplace)
     {
-        for (int32 i = 0; i < Values.Num(); ++i)
-        {
-            FString Value = ValueLabels[i] + ": " + Values[i];
-            FName UniqueKey = Key;
-            
-            // Если Replace == true, используем GUID с индексом
-            if (bReplace)
-            {
-                FString UniqueKeyString = FString::Printf(TEXT("%s_%d"), *NodeGUIDString, i);
-                UniqueKey = FName(*UniqueKeyString);
-            }
-
-            // Печатаем каждое значение по отдельности
-            UKismetSystemLibrary::PrintString(
+        FName ActualKey = Key == "" || Key == NAME_None ? FName(NodeGuidString) : Key;
+        UKismetSystemLibrary::PrintString(
                 WorldContextObject,
-                Value,
-                bPrintToLog,
-                bPrintToScreen,
+                FString::Join(Values, *Separator),
+                true,
+                false,
                 TextColor,
                 Duration,
-                UniqueKey
-            );
-        }
+                Type == EPrintType::PrintInline ? Key : ActualKey
+        );
     }
     else
     {
-        // 1. Собираем строку через Join String Array
-        TArray<FString> ActualValues;
-        
-        for (int32 i = 0; i < Values.Num(); ++i)
+        TArray<FString> ValueLabels;
+        SourceValueLabels.ParseIntoArray(ValueLabels, TEXT("#"));
+
+        if (Type == EPrintType::PrintInColumns)
         {
-            ActualValues.Add(bPrintLabel ? ValueLabels[i] + ": " + Values[i] : Values[i]);
-        }
-        
-        FString InString = FString::Join(ActualValues, *Separator);
+            int32 MaxLength = 0;
+            for (const FString& Label : ValueLabels)
+            {
+                MaxLength = FMath::Max(MaxLength, Label.Len());
+            }
 
-        // 2. Если Replace == true, конвертируем GUID в строку и в Name
-        if (bReplace)
+            for (int32 i = 0; i < ValueLabels.Num(); i++)
+            {
+                int32 Padding = MaxLength - ValueLabels[i].Len();
+                ValueLabels[i] += FString::ChrN(Padding, ' ');
+            }
+        }
+        for (int32 i = 0; i < Values.Num(); i++)
         {
-            Key = FName(NodeGUIDString);
+            FString KeyString = Key.ToString();
+            FString ActualKeyString = KeyString == "" || Key == NAME_None ? NodeGuidString : KeyString;
+            ActualKeyString = FString::Printf(TEXT("%s_%d"), *ActualKeyString, i);
+
+            FString ActualValue = Values[i];
+            if (Type == EPrintType::PrintLabels || Type == EPrintType::PrintInColumns)
+                ActualValue = ValueLabels[i] + Separator + ActualValue;
+            
+            UKismetSystemLibrary::PrintString(
+                WorldContextObject,
+                ActualValue,
+                true,
+                false,
+                TextColor,
+                Duration,
+                FName(ActualKeyString)
+            );
         }
-
-        // Используем UKismetSystemLibrary::PrintString для вывода на экран и в лог
-        UKismetSystemLibrary::PrintString(
-            WorldContextObject,
-            InString,
-            bPrintToLog,
-            bPrintToScreen,
-            TextColor,
-            Duration,
-            Key
-        );
     }
-}
-
-void UK2Node_DebugPrint::PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent)
-{
-    FName PropertyName = (PropertyChangedEvent.Property != nullptr) ? PropertyChangedEvent.Property->GetFName() : NAME_None;
-    if (PropertyName == TEXT("ValueLabels"))
-    {
-        ReconstructNode();
-    }
-    
-    Super::PostEditChangeProperty(PropertyChangedEvent);
-    GetGraph()->NotifyNodeChanged(this);
 }
 
 void UK2Node_DebugPrint::AllocateDefaultPins()
 {
+    const UDebugPrintDeveloperSettings* PluginSettings = GetDefault<UDebugPrintDeveloperSettings>();
+    
     // Execs
     CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Exec, UEdGraphSchema_K2::PN_Execute);
     CreatePin(EGPD_Output, UEdGraphSchema_K2::PC_Exec, UEdGraphSchema_K2::PN_Then);
@@ -117,10 +102,6 @@ void UK2Node_DebugPrint::AllocateDefaultPins()
     }
 
     // Print String Options
-    UEdGraphPin* ReplacePin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Boolean, TEXT("bReplace"));
-    ReplacePin->bAdvancedView = true;
-    ReplacePin->DefaultValue = TEXT("true");
-    ReplacePin->PinToolTip = TEXT("If true, the node will replace any existing on-screen messages, similar to using a non-empty key, but without the need to specify one.");
 
     UEdGraphPin* KeyPin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Name, TEXT("Key"));
     KeyPin->bAdvancedView = true;
@@ -129,38 +110,121 @@ void UK2Node_DebugPrint::AllocateDefaultPins()
 
     UEdGraphPin* SeparatorPin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_String, TEXT("Separator"));
     SeparatorPin->bAdvancedView = true;
-    SeparatorPin->DefaultValue = TEXT(" ");
+    SeparatorPin->DefaultValue = PluginSettings->Separator;
     SeparatorPin->PinToolTip = TEXT("The string used to separate each value.");
-
-    UEdGraphPin* NewLinePin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Boolean, TEXT("bNewLine"));
-    NewLinePin->bAdvancedView = true;
-    NewLinePin->DefaultValue = TEXT("true");
-    NewLinePin->PinToolTip = TEXT("Whether or not to print each value on a new line.");
-
-    UEdGraphPin* PrintToScreenPin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Boolean, TEXT("bPrintToScreen"));
-    PrintToScreenPin->bAdvancedView = true;
-    PrintToScreenPin->DefaultValue = TEXT("true");
-    PrintToScreenPin->PinToolTip = TEXT("Whether or not to print the output to the screen.");
-
-    UEdGraphPin* PrintToLogPin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Boolean, TEXT("bPrintToLog"));
-    PrintToLogPin->bAdvancedView = true;
-    PrintToLogPin->DefaultValue = TEXT("true");
-    PrintToLogPin->PinToolTip = TEXT("Whether or not to print the output to the log.");
 
     UEdGraphPin* TextColorPin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Struct, TEXT("TextColor"));
     TextColorPin->PinType.PinSubCategoryObject = TBaseStructure<FLinearColor>::Get();
     TextColorPin->bAdvancedView = true;
-    TextColorPin->DefaultValue = TEXT("(R=0.000000,G=0.666666,B=1.000000,A=1.000000)");
+    TextColorPin->DefaultValue = PluginSettings->TextColor.ToString();
     TextColorPin->PinToolTip = TEXT("The color of the text to display.");
 
     UEdGraphPin* DurationPin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Real, TEXT("Duration"));
     DurationPin->bAdvancedView = true;
-    DurationPin->DefaultValue = TEXT("2.0");
+    DurationPin->DefaultValue = FString::SanitizeFloat(PluginSettings->Duration);
     DurationPin->PinToolTip = TEXT("The display duration (if Print to Screen is True). Using negative number will result in loading the duration time from the config.");
 
+    UEdGraphPin* PrintTypePin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Byte, StaticEnum<EPrintType>(), TEXT("PrintType"));
+    PrintTypePin->bAdvancedView = true;
+    PrintTypePin->PinToolTip = TEXT("Defines how the content will be displayed. Each option adds functionality to the one above it.");
+    PrintTypePin->DefaultValue = StaticEnum<EPrintType>()->GetNameStringByValue(PluginSettings->PrintType);
+
+    // const UEdGraphSchema_K2* K2Schema = GetDefault<UEdGraphSchema_K2>();
+    // K2Schema->SetPinAutogeneratedDefaultValueBasedOnType(PrintTypePin);
+    
     if (AdvancedPinDisplay == ENodeAdvancedPins::NoPins)
         AdvancedPinDisplay = ENodeAdvancedPins::Hidden;
     Super::AllocateDefaultPins();
+}
+
+void UK2Node_DebugPrint::ExpandNode(class FKismetCompilerContext& CompilerContext, UEdGraph* SourceGraph)
+{
+    Super::ExpandNode(CompilerContext, SourceGraph);
+
+    const UEdGraphSchema_K2* Schema = CompilerContext.GetSchema();
+    bool bIsErrorFree = true;
+
+    // 1. Создаем промежуточную ноду MakeArray
+    UK2Node_MakeArray* MakeArrayNode = CompilerContext.SpawnIntermediateNode<UK2Node_MakeArray>(this, SourceGraph);
+    TArray<UEdGraphPin*> ValuePins = GetValuePins();
+    MakeArrayNode->NumInputs = ValuePins.Num();
+    MakeArrayNode->AllocateDefaultPins();
+    
+    // 2. Создаем промежуточную ноду для вызова функции ArrayDebugPrint
+    UK2Node_CallFunction* DebugPrintNode = CompilerContext.SpawnIntermediateNode<UK2Node_CallFunction>(this, SourceGraph);
+    DebugPrintNode->FunctionReference.SetExternalMember(GET_FUNCTION_NAME_CHECKED(UK2Node_DebugPrint, ArrayDebugPrint), UK2Node_DebugPrint::StaticClass());
+    DebugPrintNode->AllocateDefaultPins();
+    
+    // 3. Получаем пины функции ArrayDebugPrint~
+    UEdGraphPin* ValuesPin = DebugPrintNode->FindPin(TEXT("Values"));
+    UEdGraphPin* KeyPin = DebugPrintNode->FindPin(TEXT("Key"));
+    UEdGraphPin* SeparatorPin = DebugPrintNode->FindPin(TEXT("Separator"));
+    UEdGraphPin* TextColorPin = DebugPrintNode->FindPin(TEXT("TextColor"));
+    UEdGraphPin* DurationPin = DebugPrintNode->FindPin(TEXT("Duration"));
+    UEdGraphPin* NodeGuidPin = DebugPrintNode->FindPin(TEXT("NodeGUIDString"));
+    UEdGraphPin* SourceValueLabelsPin = DebugPrintNode->FindPin(TEXT("SourceValueLabels"));
+    UEdGraphPin* TypePin = DebugPrintNode->FindPin(TEXT("Type"));
+
+    // 4. Соединяем пин с результатом MakeArray с пином Values
+    bIsErrorFree &= Schema->TryCreateConnection(MakeArrayNode->GetOutputPin(), ValuesPin);
+    
+    // 5. Соединяем Value пины с пинами MakeArray
+    TArray<UEdGraphPin*> MakeArrayPins;
+    TArray<UEdGraphPin*> MakeArrayOutputPins;
+    MakeArrayNode->GetKeyAndValuePins(MakeArrayPins, MakeArrayOutputPins);
+
+    for (int32 i = 0; i < ValuePins.Num(); ++i)
+    {
+        // bIsErrorFree &= Schema->TryCreateConnection(ValuePins[i], MakeArrayPins[i]);
+        if (!CompilerContext.MovePinLinksToIntermediate(*ValuePins[i], *MakeArrayPins[i]).CanSafeConnect())
+        {
+            bIsErrorFree &= Schema->TryCreateConnection(ValuePins[i], MakeArrayPins[i]);
+        }
+    }
+    
+    if (!bIsErrorFree)
+    {
+        CompilerContext.MessageLog.Error(*LOCTEXT("InternalConnectionErrorw", "зада ты всё равно лох. @@").ToString(), this);
+    }
+
+    // 6. Подключаем exec пины
+    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*GetExecPin(), *DebugPrintNode->GetExecPin()).CanSafeConnect();
+    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*GetThenPin(), *DebugPrintNode->GetThenPin()).CanSafeConnect();
+
+    // Подключаем остальные параметры
+    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("Key")), *KeyPin).CanSafeConnect();
+    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("Separator")), *SeparatorPin).CanSafeConnect();
+    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("TextColor")), *TextColorPin).CanSafeConnect();
+    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("Duration")), *DurationPin).CanSafeConnect();
+    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("PrintType")), *TypePin).CanSafeConnect();
+
+    // Устанавливаем значение NodeGUID как значение по умолчанию для соответствующего пина
+    NodeGuidPin->DefaultValue = NodeGuid.ToString();
+    
+    FString SourceValueLabels = "";
+    for (int32 i = 0; i < ValueLabels.Num(); ++i)
+    {
+        SourceValueLabels += ValueLabels[i] == "" ? FString::Printf(TEXT("Value %d"), i) : ValueLabels[i];
+        SourceValueLabels += "#";
+    }
+    
+    SourceValueLabelsPin->DefaultValue = SourceValueLabels;
+    
+    if (!bIsErrorFree)
+    {
+        CompilerContext.MessageLog.Error(*LOCTEXT("InternalConnectionError", "IsValidNode: Internal connection error. @@").ToString(), this);
+    }
+    
+    BreakAllNodeLinks();
+}
+
+void UK2Node_DebugPrint::AddInputPin()
+{
+    Modify();
+    
+    ValueLabels.Add("");
+    
+    ReconstructNode();
 }
 
 void UK2Node_DebugPrint::NotifyPinConnectionListChanged(UEdGraphPin* Pin)
@@ -192,100 +256,16 @@ void UK2Node_DebugPrint::NotifyPinConnectionListChanged(UEdGraphPin* Pin)
     ReconstructNode();
 }
 
-void UK2Node_DebugPrint::ExpandNode(class FKismetCompilerContext& CompilerContext, UEdGraph* SourceGraph)
+void UK2Node_DebugPrint::PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent)
 {
-    Super::ExpandNode(CompilerContext, SourceGraph);
-
-    const UEdGraphSchema_K2* Schema = CompilerContext.GetSchema();
-    bool bIsErrorFree = true;
-
-    // 1. Создаем промежуточную ноду MakeArray
-    UK2Node_MakeArray* MakeArrayNode = CompilerContext.SpawnIntermediateNode<UK2Node_MakeArray>(this, SourceGraph);
-    TArray<UEdGraphPin*> ValuePins = GetValuePins();
-    MakeArrayNode->NumInputs = ValuePins.Num();
-    MakeArrayNode->AllocateDefaultPins();
-    
-    // 2. Создаем промежуточную ноду для вызова функции ArrayDebugPrint
-    UK2Node_CallFunction* DebugPrintNode = CompilerContext.SpawnIntermediateNode<UK2Node_CallFunction>(this, SourceGraph);
-    DebugPrintNode->FunctionReference.SetExternalMember(GET_FUNCTION_NAME_CHECKED(UK2Node_DebugPrint, ArrayDebugPrint), UK2Node_DebugPrint::StaticClass());
-    DebugPrintNode->AllocateDefaultPins();
-    
-    // 3. Получаем пины функции ArrayDebugPrint
-    UEdGraphPin* ValuesPin = DebugPrintNode->FindPin(TEXT("Values"));
-    UEdGraphPin* ReplacePin = DebugPrintNode->FindPin(TEXT("bReplace"));
-    UEdGraphPin* KeyPin = DebugPrintNode->FindPin(TEXT("Key"));
-    UEdGraphPin* SeparatorPin = DebugPrintNode->FindPin(TEXT("Separator"));
-    UEdGraphPin* NewLinePin = DebugPrintNode->FindPin(TEXT("bNewLine"));
-    UEdGraphPin* PrintToScreenPin = DebugPrintNode->FindPin(TEXT("bPrintToScreen"));
-    UEdGraphPin* PrintToLogPin = DebugPrintNode->FindPin(TEXT("bPrintToLog"));
-    UEdGraphPin* TextColorPin = DebugPrintNode->FindPin(TEXT("TextColor"));
-    UEdGraphPin* DurationPin = DebugPrintNode->FindPin(TEXT("Duration"));
-    UEdGraphPin* NodeGuidPin = DebugPrintNode->FindPin(TEXT("NodeGUIDString"));
-    UEdGraphPin* SourceValueLabelsPin = DebugPrintNode->FindPin(TEXT("SourceValueLabels"));
-
-    // 4. Соединяем пин с результатом MakeArray с пином Values
-    bIsErrorFree &= Schema->TryCreateConnection(MakeArrayNode->GetOutputPin(), ValuesPin);
-    
-    // 5. Соединяем Value пины с пинами MakeArray
-    TArray<UEdGraphPin*> MakeArrayPins;
-    TArray<UEdGraphPin*> MakeArrayOutputPins;
-    MakeArrayNode->GetKeyAndValuePins(MakeArrayPins, MakeArrayOutputPins);
-
-    for (int32 i = 0; i < ValuePins.Num(); ++i)
+    FName PropertyName = (PropertyChangedEvent.Property != nullptr) ? PropertyChangedEvent.Property->GetFName() : NAME_None;
+    if (PropertyName == TEXT("ValueLabels"))
     {
-        // bIsErrorFree &= Schema->TryCreateConnection(ValuePins[i], MakeArrayPins[i]);
-        if (!CompilerContext.MovePinLinksToIntermediate(*ValuePins[i], *MakeArrayPins[i]).CanSafeConnect())
-        {
-            bIsErrorFree &= Schema->TryCreateConnection(ValuePins[i], MakeArrayPins[i]);
-        }
+        ReconstructNode();
     }
     
-    if (!bIsErrorFree)
-    {
-        CompilerContext.MessageLog.Error(*LOCTEXT("InternalConnectionErrorw", "зада ты всё равно лох. @@").ToString(), this);
-    }
-
-    // 6. Подключаем exec пины
-    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*GetExecPin(), *DebugPrintNode->GetExecPin()).CanSafeConnect();
-    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*GetThenPin(), *DebugPrintNode->GetThenPin()).CanSafeConnect();
-
-    // Подключаем остальные параметры
-    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("bReplace")), *ReplacePin).CanSafeConnect();
-    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("Key")), *KeyPin).CanSafeConnect();
-    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("Separator")), *SeparatorPin).CanSafeConnect();
-    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("bNewLine")), *NewLinePin).CanSafeConnect();
-    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("bPrintToScreen")), *PrintToScreenPin).CanSafeConnect();
-    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("bPrintToLog")), *PrintToLogPin).CanSafeConnect();
-    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("TextColor")), *TextColorPin).CanSafeConnect();
-    bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*FindPin(TEXT("Duration")), *DurationPin).CanSafeConnect();
-
-    // Устанавливаем значение NodeGUID как значение по умолчанию для соответствующего пина
-    NodeGuidPin->DefaultValue = NodeGuid.ToString();
-    
-    FString SourceValueLabels = "";
-    for (int32 i = 0; i < ValueLabels.Num(); ++i)
-    {
-        SourceValueLabels += ValueLabels[i] == "" ? FString::Printf(TEXT("Value %d"), i) : ValueLabels[i];
-        SourceValueLabels += " ";
-    }
-    
-    SourceValueLabelsPin->DefaultValue = SourceValueLabels;
-    
-    if (!bIsErrorFree)
-    {
-        CompilerContext.MessageLog.Error(*LOCTEXT("InternalConnectionError", "IsValidNode: Internal connection error. @@").ToString(), this);
-    }
-    
-    BreakAllNodeLinks();
-}
-
-void UK2Node_DebugPrint::AddInputPin()
-{
-    Modify();
-    
-    ValueLabels.Add("");
-    
-    ReconstructNode();
+    Super::PostEditChangeProperty(PropertyChangedEvent);
+    GetGraph()->NotifyNodeChanged(this);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
