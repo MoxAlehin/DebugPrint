@@ -1,4 +1,4 @@
-// Copyright MoxAlehin All Rights Reserved.
+// Copyright MoxAlehin. All Rights Reserved.
 
 #pragma once
 

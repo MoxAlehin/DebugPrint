@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright MoxAlehin. All Rights Reserved.
 
 #include "DebugPrint.h"
 #include "DebugPrintDeveloperSettings.h"

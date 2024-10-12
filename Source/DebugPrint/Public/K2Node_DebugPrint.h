@@ -1,3 +1,5 @@
+// Copyright MoxAlehin. All Rights Reserved.
+
 #pragma once
 
 #include "CoreMinimal.h"
@@ -75,19 +77,6 @@ public:
     virtual bool CanAddPin() const override;
     virtual void RemoveInputPin(UEdGraphPin* PinToRemove) override;
     // End of IK2Node_AddPinInterface
-	
-    /**
-     * Notification from the editor that the user wants to change the PinType on a selected pin
-     *
-     * @param Pin	The pin the user wants to change the type for
-     */
-    void ChangePinType(UEdGraphPin* Pin);
-    /**
-     * Whether the user can change the pintype on a selected pin
-     *
-     * @param Pin	The pin in question
-     */
-    bool CanChangePinType(UEdGraphPin* Pin) const;
 
 	TArray<UEdGraphPin*> GetValuePins() const;
     

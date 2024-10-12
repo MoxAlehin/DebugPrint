@@ -1,3 +1,5 @@
+// Copyright MoxAlehin. All Rights Reserved.
+
 #include "K2Node_DebugPrint.h"
 
 #include "BlueprintNodeSpawner.h"
@@ -175,11 +177,12 @@ void UK2Node_DebugPrint::ExpandNode(class FKismetCompilerContext& CompilerContex
 
     for (int32 i = 0; i < ValuePins.Num(); ++i)
     {
+        bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*ValuePins[i], *MakeArrayPins[i]).CanSafeConnect();
         // bIsErrorFree &= Schema->TryCreateConnection(ValuePins[i], MakeArrayPins[i]);
-        if (!CompilerContext.MovePinLinksToIntermediate(*ValuePins[i], *MakeArrayPins[i]).CanSafeConnect())
-        {
-            bIsErrorFree &= Schema->TryCreateConnection(ValuePins[i], MakeArrayPins[i]);
-        }
+        // if (!CompilerContext.MovePinLinksToIntermediate(*ValuePins[i], *MakeArrayPins[i]).CanSafeConnect())
+        // {
+        //     bIsErrorFree &= CompilerContext.MovePinLinksToIntermediate(*MakeArrayPins[i], *ValuePins[i]).CanSafeConnect();
+        // }
     }
 
     // 6. Подключаем exec пины
@@ -394,15 +397,6 @@ bool UK2Node_DebugPrint::CanCreateUserDefinedPin(const FEdGraphPinType& InPinTyp
     }
 
     // По умолчанию разрешаем добавление пина
-    return true;
-}
-
-void UK2Node_DebugPrint::ChangePinType(UEdGraphPin* Pin)
-{
-}
-
-bool UK2Node_DebugPrint::CanChangePinType(UEdGraphPin* Pin) const
-{
     return true;
 }
 
