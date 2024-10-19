@@ -371,15 +371,15 @@ void UK2Node_DebugPrint::GetNodeContextMenuActions(UToolMenu* Menu, UGraphNodeCo
     // Check if the pin is a value pin (starting with "Value_")
     if (Context && Context->Pin && Context->Pin->PinName.ToString().StartsWith(TEXT("Value_")))
     {
-        // Add the "Remove Pin" action
         FToolMenuSection& Section = Menu->AddSection("K2NodeDebugPrint", LOCTEXT("RemovePinHeader", "Remove Pin"));
-        Section.AddMenuEntry(
-            "RemovePin",
-            LOCTEXT("RemovePin", "Remove Pin"),
-            LOCTEXT("RemovePinTooltip", "Remove this input pin."),
-            FSlateIcon(),
-            FUIAction(FExecuteAction::CreateUObject(const_cast<UK2Node_DebugPrint*>(this), &UK2Node_DebugPrint::RemoveInputPin, const_cast<UEdGraphPin*>(Context->Pin)))
-        );
+        // // Add the "Remove Pin" action
+        // Section.AddMenuEntry(
+        //     "RemovePin",
+        //     LOCTEXT("RemovePin", "Remove Pin"),
+        //     LOCTEXT("RemovePinTooltip", "Remove this input pin."),
+        //     FSlateIcon(),
+        //     FUIAction(FExecuteAction::CreateUObject(const_cast<UK2Node_DebugPrint*>(this), &UK2Node_DebugPrint::RemoveInputPin, const_cast<UEdGraphPin*>(Context->Pin)))
+        // );
 
         // Add the "Reset to Wildcard" option if the pin is not connected and not already a wildcard
         if (Context->Pin->LinkedTo.Num() == 0 && Context->Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Wildcard)
@@ -430,13 +430,15 @@ void UK2Node_DebugPrint::AddStringPin()
     Modify(); // Открываем транзакцию для поддержки Undo/Redo
 
     int32 Index = GetValuePins().Num();
-    FString NewPinLabel = FString::Printf(TEXT("[%d]"), Index);
+    FString NewPinLabel = TEXT("1");
     FName NewPinName = FName(*FString::Printf(TEXT("Value_%d"), Index));
     ValueLabels.Add(NewPinLabel);
+    MakeLabelsUnique();
 
     // Создаём новый пин типа String
-    CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_String, NewPinName);
-
+    UEdGraphPin* StringPin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_String, NewPinName);
+    StringPin->DefaultValue = TEXT("Section");
+    
     // Обновляем ноду после добавления нового пина
     ReconstructNode();
     
