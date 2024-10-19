@@ -135,9 +135,16 @@ void UK2Node_DebugPrint::AllocateDefaultPins()
     PrintTypePin->PinToolTip = TEXT("Defines how the content will be displayed. Each option adds functionality to the one above it.");
     PrintTypePin->DefaultValue = StaticEnum<EPrintType>()->GetNameStringByValue(PluginSettings->PrintType);
 
+    // Hiding Advanced pins
     if (AdvancedPinDisplay == ENodeAdvancedPins::NoPins)
         AdvancedPinDisplay = ENodeAdvancedPins::Hidden;
     Super::AllocateDefaultPins();
+}
+
+void UK2Node_DebugPrint::NodeConnectionListChanged()
+{
+    // Refresh to remove disconnected pins 
+    ReconstructNode();
 }
 
 void UK2Node_DebugPrint::ExpandNode(class FKismetCompilerContext& CompilerContext, UEdGraph* SourceGraph)
@@ -214,53 +221,44 @@ void UK2Node_DebugPrint::ExpandNode(class FKismetCompilerContext& CompilerContex
 
 void UK2Node_DebugPrint::NotifyPinConnectionListChanged(UEdGraphPin* Pin)
 {
-    if (Pin)
+    if (GetValuePins().Contains((Pin))) 
     {
-        if (Pin->LinkedTo.Num() > 0)
-            ReconstructNode();
-        else
+        if (Pin->LinkedTo.Num() == 0)
             RemoveInputPin(Pin);
     }
 }
 
 void UK2Node_DebugPrint::RemoveInputPin(UEdGraphPin* PinToRemove)
 {
-    if (!PinToRemove || !Pins.Contains(PinToRemove))
+    TArray<UEdGraphPin*> ValuePins = GetValuePins();
+    if (!PinToRemove || !ValuePins.Contains(PinToRemove))
     {
         return;
     }
 
     // Open a transaction to support undo/redo
     Modify();
-
-    // Break all links before removing the pin
-    PinToRemove->BreakAllPinLinks();
     
     // Update the number of pins and remove the corresponding label
-    int32 Index = GetValuePins().Find(PinToRemove);
-
+    int32 Index = ValuePins.Find(PinToRemove);
+    
     // Remove the pin from the array
     Pins.Remove(PinToRemove);
+    ValuePins = GetValuePins();
     
     if (ValueLabels.IsValidIndex(Index))
         ValueLabels.RemoveAt(Index);
     
     // Recalculate the names of the remaining pins
     Index = 0;
-    for (UEdGraphPin* Pin : Pins)
+    for (UEdGraphPin* Pin : ValuePins)
     {
-        if (Pin->PinName.ToString().StartsWith(TEXT("Value_")))
-        {
-            // Rename the remaining pins
-            Pin->Modify();
-            Pin->PinName = FName(*FString::Printf(TEXT("Value_%d"), Index));
-            Index++;
-        }
+        // Rename the remaining pins
+        Pin->Modify();
+        Pin->PinName = FName(*FString::Printf(TEXT("Value_%d"), Index));
+        Index++;
     }
-
-    // Rebuild the node
-    ReconstructNode();
-
+    
     // Notify the Blueprint that the node has changed
     FBlueprintEditorUtils::MarkBlueprintAsModified(GetBlueprint());
 }
@@ -302,6 +300,7 @@ UEdGraphPin* UK2Node_DebugPrint::CreatePinFromUserDefinition(const TSharedPtr<FU
     UEdGraphPin* NewPin = CreatePin(EGPD_Input, NewPinInfo->PinType, FName(*FString::Printf(TEXT("Value_%d"), ValueLabels.Num())));
     ValueLabels.Add(NewPinInfo->PinName.ToString());
     MakeLabelsUnique();
+    NewPin->PinFriendlyName = FText::FromString(ValueLabels.Last());
     UserDefinedPins.RemoveAt(0);
     return NewPin;
 }

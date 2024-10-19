@@ -5,7 +5,6 @@
 #include "CoreMinimal.h"
 #include "K2Node.h"
 #include "K2Node_EditablePinBase.h"
-#include "K2Node_AddPinInterface.h"
 #include "K2Node_DebugPrint.generated.h"
 
 UENUM(BlueprintType)
@@ -49,6 +48,7 @@ public:
 
     // Begin UEdGraphNode Interface
     virtual void AllocateDefaultPins() override;
+    virtual void NodeConnectionListChanged() override;
 
     virtual FLinearColor GetNodeTitleColor() const override;
     virtual bool ShouldShowNodeProperties() const override { return true; }
