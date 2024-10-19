@@ -19,7 +19,7 @@ enum EPrintType : uint8
 };
 
 UCLASS()
-class DEBUGPRINT_API UK2Node_DebugPrint : public UK2Node_EditablePinBase, public IK2Node_AddPinInterface
+class DEBUGPRINT_API UK2Node_DebugPrint : public UK2Node_EditablePinBase
 {
     GENERATED_BODY()
     
@@ -49,22 +49,25 @@ public:
 
     // Begin UEdGraphNode Interface
     virtual void AllocateDefaultPins() override;
-    virtual FText GetTooltipText() const override;
+
     virtual FLinearColor GetNodeTitleColor() const override;
+    virtual bool ShouldShowNodeProperties() const override { return true; }
     virtual FText GetNodeTitle(ENodeTitleType::Type TitleType) const override;
-    virtual FSlateIcon GetIconAndTint(FLinearColor& OutColor) const override;
     virtual FName GetCornerIcon() const override;
-	virtual bool ShouldShowNodeProperties() const override { return true; }
+    virtual FText GetTooltipText() const override;
+    virtual FSlateIcon GetIconAndTint(FLinearColor& OutColor) const override;
     // End of UEdGraphNode Interface
 
     // Begin UK2Node Interface
-    virtual void GetMenuActions(FBlueprintActionDatabaseRegistrar& ActionRegistrar) const override;
-    virtual FText GetMenuCategory() const override;
-    virtual void GetNodeContextMenuActions(class UToolMenu* Menu, class UGraphNodeContextMenuContext* Context) const override;
-    virtual void NotifyPinConnectionListChanged(UEdGraphPin* Pin) override;
     virtual void ExpandNode(class FKismetCompilerContext& CompilerContext, UEdGraph* SourceGraph) override;
+    virtual void NotifyPinConnectionListChanged(UEdGraphPin* Pin) override;
     virtual void PostReconstructNode() override;
     virtual void ReallocatePinsDuringReconstruction(TArray<UEdGraphPin*>& OldPins) override;
+    virtual void GetNodeContextMenuActions(class UToolMenu* Menu, class UGraphNodeContextMenuContext* Context) const override;
+    virtual int32 GetNodeRefreshPriority() const override { return EBaseNodeRefreshPriority::Low_UsesDependentWildcard; }
+    
+    virtual FText GetMenuCategory() const override;
+    virtual void GetMenuActions(FBlueprintActionDatabaseRegistrar& ActionRegistrar) const override;
     // End of UK2Node Interface
 
 	// Begin UK2Node_EditablePinBase Interface
@@ -72,15 +75,14 @@ public:
 	virtual UEdGraphPin* CreatePinFromUserDefinition(const TSharedPtr<FUserPinInfo> NewPinInfo) override;
 	virtual bool CanCreateUserDefinedPin(const FEdGraphPinType& InPinType, EEdGraphPinDirection InDesiredDirection, FText& OutErrorMessage) override;
 	// End of UK2Node_EditablePinBase Interface
-	
-    // Begin IK2Node_AddPinInterface
-    virtual void AddInputPin() override;
-    virtual bool CanAddPin() const override;
-    virtual void RemoveInputPin(UEdGraphPin* PinToRemove) override;
-    // End of IK2Node_AddPinInterface
-
+    
+    virtual void RemoveInputPin(UEdGraphPin* PinToRemove);
 	TArray<UEdGraphPin*> GetValuePins() const;
     
 private:
     void ResetPinToWildcard(UEdGraphPin* PinToReset);
+    void AddStringPin();
+    void OnValueLabelsChange();
+    void MakeLabelsUnique();
+    static void SplitStringAndNumber(const FString& InputString, FString& OutString, int32& OutNumber);
 };

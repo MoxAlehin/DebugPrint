@@ -212,64 +212,15 @@ void UK2Node_DebugPrint::ExpandNode(class FKismetCompilerContext& CompilerContex
     BreakAllNodeLinks();
 }
 
-void UK2Node_DebugPrint::AddInputPin()
-{
-    Modify();
-    
-    // Add an empty label when a new input pin is added
-    ValueLabels.Add("");
-    
-    ReconstructNode();
-}
-
 void UK2Node_DebugPrint::NotifyPinConnectionListChanged(UEdGraphPin* Pin)
 {
-    Super::NotifyPinConnectionListChanged(Pin);
-
-    if (!Pin) // Check if the pin is valid
-    {
-        return;
-    }
-
-    // Check if the pin is a wildcard and has a connection
-    if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Wildcard)
+    if (Pin)
     {
         if (Pin->LinkedTo.Num() > 0)
-        {
-            // Get the first pin connected to this wildcard pin
-            UEdGraphPin* LinkedPin = Pin->LinkedTo[0];
-            
-            // Set the pin's type to match the connected pin's type
-            Pin->PinType = LinkedPin->PinType;
-        }
+            ReconstructNode();
         else
-        {
-            // If disconnected, reset the pin type to wildcard
-            Pin->PinType.PinCategory = UEdGraphSchema_K2::PC_Wildcard;
-        }
+            RemoveInputPin(Pin);
     }
-    ReconstructNode();
-}
-
-void UK2Node_DebugPrint::PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent)
-{
-    FName PropertyName = (PropertyChangedEvent.Property != nullptr) ? PropertyChangedEvent.Property->GetFName() : NAME_None;
-    if (PropertyName == TEXT("ValueLabels"))
-    {
-        ReconstructNode();
-    }
-    
-    Super::PostEditChangeProperty(PropertyChangedEvent);
-    GetGraph()->NotifyNodeChanged(this);
-}
-
-//////////////////////////////////////////////////////////////////////////////////////
-// VISUALS
-//////////////////////////////////////////////////////////////////////////////////////
-
-bool UK2Node_DebugPrint::CanAddPin() const
-{
-    return true;  // Node supports the "Add Pin" button
 }
 
 void UK2Node_DebugPrint::RemoveInputPin(UEdGraphPin* PinToRemove)
@@ -280,20 +231,20 @@ void UK2Node_DebugPrint::RemoveInputPin(UEdGraphPin* PinToRemove)
     }
 
     // Open a transaction to support undo/redo
-    FScopedTransaction Transaction(LOCTEXT("RemovePinTx", "Remove Pin"));
     Modify();
 
     // Break all links before removing the pin
     PinToRemove->BreakAllPinLinks();
+    
+    // Update the number of pins and remove the corresponding label
+    int32 Index = GetValuePins().Find(PinToRemove);
 
     // Remove the pin from the array
     Pins.Remove(PinToRemove);
-
-    // Update the number of pins and remove the corresponding label
-    FString Prefix = TEXT("Value_");
-    int32 Index = FCString::Atoi(*PinToRemove->PinName.ToString().RightChop(Prefix.Len()));
-    ValueLabels.RemoveAt(Index);
-
+    
+    if (ValueLabels.IsValidIndex(Index))
+        ValueLabels.RemoveAt(Index);
+    
     // Recalculate the names of the remaining pins
     Index = 0;
     for (UEdGraphPin* Pin : Pins)
@@ -314,28 +265,10 @@ void UK2Node_DebugPrint::RemoveInputPin(UEdGraphPin* PinToRemove)
     FBlueprintEditorUtils::MarkBlueprintAsModified(GetBlueprint());
 }
 
-void UK2Node_DebugPrint::PostReconstructNode()
-{
-    // Restore pin types based on existing connections
-    for (UEdGraphPin* Pin : Pins)
-    {
-        if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Wildcard && Pin->LinkedTo.Num() > 0)
-        {
-            Pin->PinType = Pin->LinkedTo[0]->PinType;
-        }
-    }
-
-    Super::PostReconstructNode();
-}
-
 void UK2Node_DebugPrint::ReallocatePinsDuringReconstruction(TArray<UEdGraphPin*>& OldPins)
 {
-    // Clear existing pins
-    Pins.Empty();
-
-    // Recreate all pins
-    AllocateDefaultPins();
-
+    Super::ReallocatePinsDuringReconstruction(OldPins);
+    
     // Restore the old pins and their types
     for (UEdGraphPin* OldPin : OldPins)
     {
@@ -344,25 +277,31 @@ void UK2Node_DebugPrint::ReallocatePinsDuringReconstruction(TArray<UEdGraphPin*>
         {
             // Restore wildcard pin type
             NewPin->PinType = OldPin->PinType;
-
-            // Restore connections
-            for (UEdGraphPin* LinkedPin : OldPin->LinkedTo)
-            {
-                NewPin->MakeLinkTo(LinkedPin);
-            }
         }
     }
-    
-    RestoreSplitPins(OldPins);
-
-    // Notify the Blueprint editor that changes have been made
-    GetGraph()->NotifyGraphChanged();
 }
+
+void UK2Node_DebugPrint::PostReconstructNode()
+{
+    Super::PostReconstructNode();
+    
+    // Restore pin types based on existing connections
+    for (UEdGraphPin* Pin : Pins)
+    {
+        if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Wildcard && Pin->LinkedTo.Num() > 0)
+        {
+            Pin->PinType = Pin->LinkedTo[0]->PinType;
+        }
+    }
+}
+
+// UK2Node_EditablePinBase
 
 UEdGraphPin* UK2Node_DebugPrint::CreatePinFromUserDefinition(const TSharedPtr<FUserPinInfo> NewPinInfo)
 {
     UEdGraphPin* NewPin = CreatePin(EGPD_Input, NewPinInfo->PinType, FName(*FString::Printf(TEXT("Value_%d"), ValueLabels.Num())));
     ValueLabels.Add(NewPinInfo->PinName.ToString());
+    MakeLabelsUnique();
     UserDefinedPins.RemoveAt(0);
     return NewPin;
 }
@@ -411,9 +350,24 @@ TArray<UEdGraphPin*> UK2Node_DebugPrint::GetValuePins() const
     return ValuePins;
 }
 
+// RMB Node Menu
+
 void UK2Node_DebugPrint::GetNodeContextMenuActions(UToolMenu* Menu, UGraphNodeContextMenuContext* Context) const
 {
     Super::GetNodeContextMenuActions(Menu, Context);
+
+    if (Context && !Context->Pin)
+    {
+        // Добавляем новый раздел для опции "Add String Pin"
+        FToolMenuSection& Section = Menu->AddSection("K2NodeDebugPrintAddPin", LOCTEXT("AddPinHeader", "Add Pin"));
+        Section.AddMenuEntry(
+            "AddStringPin",
+            LOCTEXT("AddStringPin", "Add String Pin"),
+            LOCTEXT("AddStringPinTooltip", "Add a new String pin to the node."),
+            FSlateIcon(),
+            FUIAction(FExecuteAction::CreateUObject(const_cast<UK2Node_DebugPrint*>(this), &UK2Node_DebugPrint::AddStringPin))
+        );
+    }
 
     // Check if the pin is a value pin (starting with "Value_")
     if (Context && Context->Pin && Context->Pin->PinName.ToString().StartsWith(TEXT("Value_")))
@@ -440,49 +394,6 @@ void UK2Node_DebugPrint::GetNodeContextMenuActions(UToolMenu* Menu, UGraphNodeCo
             );
         }
     }
-}
-
-FText UK2Node_DebugPrint::GetTooltipText() const
-{
-    return LOCTEXT("DebugPrintNode_Tooltip", "DebugPrintNode_Tooltip");
-}
-
-FLinearColor UK2Node_DebugPrint::GetNodeTitleColor() const
-{
-    return FLinearColor(1.f, 1.f, 0.f);
-}
-
-FText UK2Node_DebugPrint::GetNodeTitle(ENodeTitleType::Type TitleType) const
-{
-    return LOCTEXT("DebugPrint", "Debug Print");
-}
-
-FSlateIcon UK2Node_DebugPrint::GetIconAndTint(FLinearColor& OutColor) const
-{
-    static FSlateIcon Icon("EditorStyle", "Kismet.AllClasses.FunctionIcon");
-    return Icon;
-}
-
-FName UK2Node_DebugPrint::GetCornerIcon() const
-{
-    return TEXT("Graph.Message.MessageIcon");
-}
-
-void UK2Node_DebugPrint::GetMenuActions(FBlueprintActionDatabaseRegistrar& ActionRegistrar) const
-{
-    UClass* ActionKey = GetClass();
-    if (ActionRegistrar.IsOpenForRegistration(ActionKey))
-    {
-        UBlueprintNodeSpawner* NodeSpawner = UBlueprintNodeSpawner::Create(GetClass());
-        check(NodeSpawner != nullptr);
-
-        ActionRegistrar.AddBlueprintAction(ActionKey, NodeSpawner);
-    }
-}
-
-FText UK2Node_DebugPrint::GetMenuCategory() const
-{
-    return FEditorCategoryUtils::GetCommonCategory(FCommonEditorCategory::Development);
 }
 
 void UK2Node_DebugPrint::ResetPinToWildcard(UEdGraphPin* PinToReset)
@@ -513,6 +424,168 @@ void UK2Node_DebugPrint::ResetPinToWildcard(UEdGraphPin* PinToReset)
 
     // Rebuild the node for visual updates
     ReconstructNode();
+}
+
+void UK2Node_DebugPrint::AddStringPin()
+{
+    Modify(); // Открываем транзакцию для поддержки Undo/Redo
+
+    int32 Index = GetValuePins().Num();
+    FString NewPinLabel = FString::Printf(TEXT("[%d]"), Index);
+    FName NewPinName = FName(*FString::Printf(TEXT("Value_%d"), Index));
+    ValueLabels.Add(NewPinLabel);
+
+    // Создаём новый пин типа String
+    CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_String, NewPinName);
+
+    // Обновляем ноду после добавления нового пина
+    ReconstructNode();
+    
+    // Обновляем граф, чтобы изменения отобразились в редакторе
+    GetGraph()->NotifyGraphChanged();
+}
+
+// Details Panel
+
+void UK2Node_DebugPrint::PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent)
+{
+    FName PropertyName = (PropertyChangedEvent.Property != nullptr) ? PropertyChangedEvent.Property->GetFName() : NAME_None;
+    if (PropertyName == TEXT("ValueLabels"))
+    {
+        OnValueLabelsChange();
+        ReconstructNode();
+        GetGraph()->NotifyNodeChanged(this);
+    }
+    
+    Super::PostEditChangeProperty(PropertyChangedEvent);
+}
+
+void UK2Node_DebugPrint::OnValueLabelsChange()
+{
+    TArray<UEdGraphPin*> ValuePins = GetValuePins();
+    
+    for (int32 Index = 0; Index < ValueLabels.Num(); ++Index)
+    {
+        if (ValueLabels[Index] == "")
+            ValueLabels[Index] = FString::Printf(TEXT("[%d]"), Index);
+    }
+    MakeLabelsUnique();
+
+    // Проходим по каждому пину
+    for (UEdGraphPin* Pin : ValuePins)
+    {
+        // Найти соответствующий label в массиве ValueLabels
+        int32 LabelIndex = ValueLabels.IndexOfByKey(Pin->PinFriendlyName.ToString());
+
+        // Если нашли совпадение
+        if (LabelIndex != INDEX_NONE)
+        {
+            // Задаем новый PinName в формате "Value_I"
+            Pin->PinName = FName(*FString::Printf(TEXT("Value_%d"), LabelIndex));
+        }
+    }
+
+    ValuePins[0]->PinName;
+
+    // После изменения перестроить ноду
+    ReconstructNode();
+}
+
+void UK2Node_DebugPrint::MakeLabelsUnique()
+{
+    // Карта для отслеживания количества повторений каждой строки
+    TSet<FString> LabelsSet;
+
+    // Проходим по массиву и обрабатываем каждую строку
+    for (int32 i = 0; i < ValueLabels.Num(); ++i)
+    {
+        FString& CurrentString = ValueLabels[i];
+
+        if (LabelsSet.Contains(CurrentString))
+        {
+            int32 LabelNumber;
+            FString LabelString; 
+            SplitStringAndNumber(CurrentString, LabelString, LabelNumber);
+            LabelNumber = LabelNumber == INDEX_NONE ? 1 : LabelNumber + 1;
+            ValueLabels[i] = FString::Printf(TEXT("%s%d"), *LabelString, LabelNumber);
+            --i;
+        }
+        else
+            LabelsSet.Add(CurrentString);
+    }
+}
+
+void UK2Node_DebugPrint::SplitStringAndNumber(const FString& InputString, FString& OutString, int32& OutNumber)
+{
+    // Инициализируем переменные
+    OutNumber = -1; // -1 как индикатор отсутствия числа
+    OutString = InputString; // По умолчанию возвращаем всю строку
+
+    // Перебираем строку с конца, чтобы найти последовательность цифр
+    int32 Index = InputString.Len() - 1;
+
+    while (Index >= 0 && FChar::IsDigit(InputString[Index]))
+    {
+        Index--;
+    }
+
+    // Если нашлись цифры в конце строки
+    if (Index < InputString.Len() - 1)
+    {
+        // Получаем числовую часть
+        FString NumberPart = InputString.Mid(Index + 1);
+        OutNumber = FCString::Atoi(*NumberPart); // Конвертируем строку в число
+
+        // Получаем оставшуюся часть строки
+        OutString = InputString.Left(Index + 1); // Оставляем строку без числовой части
+    }
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
+// VISUALS
+//////////////////////////////////////////////////////////////////////////////////////
+
+FName UK2Node_DebugPrint::GetCornerIcon() const
+{
+    return TEXT("Graph.Message.MessageIcon");
+}
+
+FText UK2Node_DebugPrint::GetMenuCategory() const
+{
+    return FEditorCategoryUtils::GetCommonCategory(FCommonEditorCategory::Development);
+}
+
+void UK2Node_DebugPrint::GetMenuActions(FBlueprintActionDatabaseRegistrar& ActionRegistrar) const
+{
+    UClass* ActionKey = GetClass();
+    if (ActionRegistrar.IsOpenForRegistration(ActionKey))
+    {
+        UBlueprintNodeSpawner* NodeSpawner = UBlueprintNodeSpawner::Create(GetClass());
+        check(NodeSpawner != nullptr);
+
+        ActionRegistrar.AddBlueprintAction(ActionKey, NodeSpawner);
+    }
+}
+
+FText UK2Node_DebugPrint::GetTooltipText() const
+{
+    return LOCTEXT("DebugPrintNode_Tooltip", "DebugPrintNode_Tooltip");
+}
+
+FLinearColor UK2Node_DebugPrint::GetNodeTitleColor() const
+{
+    return FLinearColor(1.f, 1.f, 0.f);
+}
+
+FText UK2Node_DebugPrint::GetNodeTitle(ENodeTitleType::Type TitleType) const
+{
+    return LOCTEXT("DebugPrint", "Debug Print");
+}
+
+FSlateIcon UK2Node_DebugPrint::GetIconAndTint(FLinearColor& OutColor) const
+{
+    static FSlateIcon Icon("EditorStyle", "Kismet.AllClasses.FunctionIcon");
+    return Icon;
 }
 
 #undef LOCTEXT_NAMESPACE
