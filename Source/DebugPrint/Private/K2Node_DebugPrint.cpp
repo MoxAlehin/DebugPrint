@@ -357,7 +357,7 @@ void UK2Node_DebugPrint::GetNodeContextMenuActions(UToolMenu* Menu, UGraphNodeCo
 
     if (Context && !Context->Pin)
     {
-        // Добавляем новый раздел для опции "Add String Pin"
+        // Adding a new section for the "Add String Pin" option
         FToolMenuSection& Section = Menu->AddSection("K2NodeDebugPrintAddPin", LOCTEXT("AddPinHeader", "Add Pin"));
         Section.AddMenuEntry(
             "AddStringPin",
@@ -427,7 +427,7 @@ void UK2Node_DebugPrint::ResetPinToWildcard(UEdGraphPin* PinToReset)
 
 void UK2Node_DebugPrint::AddStringPin()
 {
-    Modify(); // Открываем транзакцию для поддержки Undo/Redo
+    Modify(); // Begin a transaction to support Undo/Redo
 
     int32 Index = GetValuePins().Num();
     FString NewPinLabel = TEXT("1");
@@ -435,14 +435,14 @@ void UK2Node_DebugPrint::AddStringPin()
     ValueLabels.Add(NewPinLabel);
     MakeLabelsUnique();
 
-    // Создаём новый пин типа String
+    // Create a new pin of type String
     UEdGraphPin* StringPin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_String, NewPinName);
     StringPin->DefaultValue = TEXT("Section");
     
-    // Обновляем ноду после добавления нового пина
+    // Rebuild the node after adding a new pin
     ReconstructNode();
     
-    // Обновляем граф, чтобы изменения отобразились в редакторе
+    // Refresh the graph to reflect the changes in the editor
     GetGraph()->NotifyGraphChanged();
 }
 
@@ -472,32 +472,30 @@ void UK2Node_DebugPrint::OnValueLabelsChange()
     }
     MakeLabelsUnique();
 
-    // Проходим по каждому пину
+    // Iterate through each pin
     for (UEdGraphPin* Pin : ValuePins)
     {
-        // Найти соответствующий label в массиве ValueLabels
+        // Find the corresponding label in the ValueLabels array
         int32 LabelIndex = ValueLabels.IndexOfByKey(Pin->PinFriendlyName.ToString());
 
-        // Если нашли совпадение
+        // If a match is found
         if (LabelIndex != INDEX_NONE)
         {
-            // Задаем новый PinName в формате "Value_I"
             Pin->PinName = FName(*FString::Printf(TEXT("Value_%d"), LabelIndex));
         }
     }
 
     ValuePins[0]->PinName;
 
-    // После изменения перестроить ноду
     ReconstructNode();
 }
 
 void UK2Node_DebugPrint::MakeLabelsUnique()
 {
-    // Карта для отслеживания количества повторений каждой строки
+    // Set to track occurrences of each string
     TSet<FString> LabelsSet;
 
-    // Проходим по массиву и обрабатываем каждую строку
+    // Iterate through the array and process each string
     for (int32 i = 0; i < ValueLabels.Num(); ++i)
     {
         FString& CurrentString = ValueLabels[i];
@@ -509,7 +507,7 @@ void UK2Node_DebugPrint::MakeLabelsUnique()
             SplitStringAndNumber(CurrentString, LabelString, LabelNumber);
             LabelNumber = LabelNumber == INDEX_NONE ? 1 : LabelNumber + 1;
             ValueLabels[i] = FString::Printf(TEXT("%s%d"), *LabelString, LabelNumber);
-            --i;
+            --i;  // Re-process the current index to check the newly updated label
         }
         else
             LabelsSet.Add(CurrentString);
@@ -518,11 +516,11 @@ void UK2Node_DebugPrint::MakeLabelsUnique()
 
 void UK2Node_DebugPrint::SplitStringAndNumber(const FString& InputString, FString& OutString, int32& OutNumber)
 {
-    // Инициализируем переменные
-    OutNumber = -1; // -1 как индикатор отсутствия числа
-    OutString = InputString; // По умолчанию возвращаем всю строку
+    // Initialize output variables
+    OutNumber = INDEX_NONE;  // indicates no number found
+    OutString = InputString; // Default to returning the entire input string
 
-    // Перебираем строку с конца, чтобы найти последовательность цифр
+    // Traverse the string from the end to find a sequence of digits
     int32 Index = InputString.Len() - 1;
 
     while (Index >= 0 && FChar::IsDigit(InputString[Index]))
@@ -530,15 +528,15 @@ void UK2Node_DebugPrint::SplitStringAndNumber(const FString& InputString, FStrin
         Index--;
     }
 
-    // Если нашлись цифры в конце строки
+    // If digits are found at the end of the string
     if (Index < InputString.Len() - 1)
     {
-        // Получаем числовую часть
+        // Extract the numeric part
         FString NumberPart = InputString.Mid(Index + 1);
-        OutNumber = FCString::Atoi(*NumberPart); // Конвертируем строку в число
+        OutNumber = FCString::Atoi(*NumberPart); // Convert the numeric part to an integer
 
-        // Получаем оставшуюся часть строки
-        OutString = InputString.Left(Index + 1); // Оставляем строку без числовой части
+        // Extract the remaining non-numeric part of the string
+        OutString = InputString.Left(Index + 1); // Get the part of the string without the numeric portion
     }
 }
 
