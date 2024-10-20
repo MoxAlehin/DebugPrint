@@ -9,24 +9,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # Checkout the repository code (latest version of the action)
+    # Checkout the repository code
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # Remove all files except .uplugin, Source, and Resource directories
-    - name: Clean up unnecessary files
+    # Create a new directory called DebugPrint and move necessary files into it
+    - name: Prepare files
       run: |
-        find . -mindepth 1 -not -name '*.uplugin' -not -path './Source*' -not -path './Resource*' -exec rm -rf {} +
+        mkdir DebugPrint
+        cp *.uplugin DebugPrint/
+        cp -r Source DebugPrint/
+        cp -r Resource DebugPrint/
 
-    # Create a ZIP archive of the plugin with the required files
+    # Create a ZIP archive of the DebugPrint directory with the required files
     - name: Zip Plugin
-      run: zip -r DebugPrint-v${{ github.event.release.tag_name }}.zip .
+      run: zip -r DebugPrint-${{ github.event.release.tag_name }}.zip DebugPrint
 
-    # Upload the ZIP archive as a release asset using a more up-to-date action
+    # Upload the ZIP archive as a release asset
     - name: Upload Plugin to Release
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: DebugPrint-v${{ github.event.release.tag_name }}.zip
+        file: DebugPrint-${{ github.event.release.tag_name }}.zip
         asset_name: DebugPrint-v${{ github.event.release.tag_name }}.zip
         tag: ${{ github.event.release.tag_name }}
