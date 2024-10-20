@@ -21,8 +21,8 @@ jobs:
     - name: Prepare release directory
       run: |
         mkdir $NAME
-        cp *.uplugin $NAME/
-        cp -r Source $NAME/
+        cp    *.uplugin $NAME/
+        cp -r Source    $NAME/
         cp -r Resources $NAME/
 
     # Create a ZIP archive of the directory with the required files
@@ -34,6 +34,6 @@ jobs:
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file:       $NAME-${{ github.event.release.tag_name }}.zip
-        asset_name: $NAME-${{ github.event.release.tag_name }}.zip
+        file:       ${{ env.NAME }}-${{ github.event.release.tag_name }}.zip
+        asset_name: ${{ env.NAME }}-${{ github.event.release.tag_name }}.zip
         tag:        ${{ github.event.release.tag_name }}
