@@ -1,4 +1,4 @@
-name: Prepare Release for DebugPrint Plugin
+name: Prepare Release for Plugin
 
 on:
   release:
@@ -13,23 +13,27 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # Create a new directory called DebugPrint and move necessary files into it
-    - name: Prepare files
-      run: |
-        mkdir DebugPrint
-        cp *.uplugin DebugPrint/
-        cp -r Source DebugPrint/
-        cp -r Resources DebugPrint/
+    # Set a variable with the repository name
+    - name: Set repository name variable
+      run: echo "REPO_NAME=$(basename ${{ github.repository }})" >> $GITHUB_ENV
 
-    # Create a ZIP archive of the DebugPrint directory with the required files
+    # Create a new directory with the repository name and move necessary files into it
+    - name: Prepare plugin directory
+      run: |
+        mkdir $REPO_NAME
+        cp *.uplugin $REPO_NAME/
+        cp -r Source $REPO_NAME/
+        cp -r Resource $REPO_NAME/
+
+    # Create a ZIP archive of the directory with the required files
     - name: Zip Plugin
-      run: zip -r DebugPrint-${{ github.event.release.tag_name }}.zip DebugPrint
+      run: zip -r $REPO_NAME-${{ github.event.release.tag_name }}.zip $REPO_NAME
 
     # Upload the ZIP archive as a release asset
     - name: Upload Plugin to Release
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: DebugPrint-${{ github.event.release.tag_name }}.zip
-        asset_name: DebugPrint-v${{ github.event.release.tag_name }}.zip
+        file: $REPO_NAME-${{ github.event.release.tag_name }}.zip
+        asset_name: $REPO_NAME-${{ github.event.release.tag_name }}.zip
         tag: ${{ github.event.release.tag_name }}
