@@ -23,7 +23,7 @@ jobs:
         mkdir $REPO_NAME
         cp *.uplugin $REPO_NAME/
         cp -r Source $REPO_NAME/
-        cp -r Resource $REPO_NAME/
+        cp -r Resources $REPO_NAME/
 
     # Create a ZIP archive of the directory with the required files
     - name: Zip Plugin
