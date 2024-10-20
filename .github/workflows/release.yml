@@ -19,7 +19,7 @@ jobs:
         mkdir DebugPrint
         cp *.uplugin DebugPrint/
         cp -r Source DebugPrint/
-        cp -r Resource DebugPrint/
+        cp -r Resources DebugPrint/
 
     # Create a ZIP archive of the DebugPrint directory with the required files
     - name: Zip Plugin
