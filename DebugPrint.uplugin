@@ -4,7 +4,7 @@
 	"VersionName": "1.0",
 	"FriendlyName": "Debug Print",
 	"Description": "Blueprint Node for comfort printing debug info",
-	"Category": "Other",
+	"Category": "Blueprints",
 	"CreatedBy": "Mox Alehin",
 	"CreatedByURL": "https://github.com/MoxAlehin",
 	"DocsURL": "https://github.com/MoxAlehin/DebugPrint",
