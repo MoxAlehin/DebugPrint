@@ -18,31 +18,16 @@
 class UK2Node_MakeArray;
 class UGraphEditorSettings;
 
-void UK2Node_DebugPrint::ArrayDebugPrint(
-    const UObject* WorldContextObject,
-    const TArray<FString>& Values,
-    FName Key,
-    const FString& Separator,
-    const FString SourceValueLabels,
-    FLinearColor TextColor,
-    float Duration,
-    const FString& NodeGuidString,
-    TEnumAsByte<enum EPrintType> Type
-    )
+void UK2Node_DebugPrint::ArrayDebugPrint(const UObject* WorldContextObject, const TArray<FString>& Values, FName Key,
+    const FString& Separator, const FString SourceValueLabels, FLinearColor TextColor, float Duration, const FString& NodeGuidString,
+    TEnumAsByte<enum EPrintType> Type)
 {
     // If the type is inline or replace, print all values on the same line or overwrite the previous output
     if (Type == EPrintType::PrintInline || Type == EPrintType::PrintReplace)
     {
         FName ActualKey = Key == "" || Key == NAME_None ? FName(NodeGuidString) : Key;
-        UKismetSystemLibrary::PrintString(
-                WorldContextObject,
-                FString::Join(Values, *Separator),
-                true,
-                false,
-                TextColor,
-                Duration,
-                Type == EPrintType::PrintInline ? Key : ActualKey
-        );
+        UKismetSystemLibrary::PrintString(WorldContextObject, FString::Join(Values, *Separator), true, false, TextColor, Duration,
+            Type == EPrintType::PrintInline ? Key : ActualKey);
     }
     else
     {
@@ -76,16 +61,8 @@ void UK2Node_DebugPrint::ArrayDebugPrint(
             FString ActualValue = Values[i];
             if (Type == EPrintType::PrintLabels || Type == EPrintType::PrintInColumns)
                 ActualValue = ValueLabels[i] + Separator + ActualValue;
-            
-            UKismetSystemLibrary::PrintString(
-                WorldContextObject,
-                ActualValue,
-                true,
-                false,
-                TextColor,
-                Duration,
-                FName(ActualKeyString)
-            );
+
+            UKismetSystemLibrary::PrintString(WorldContextObject, ActualValue, true, false, TextColor, Duration, FName(ActualKeyString));
         }
     }
 }
@@ -93,11 +70,11 @@ void UK2Node_DebugPrint::ArrayDebugPrint(
 void UK2Node_DebugPrint::AllocateDefaultPins()
 {
     const UDebugPrintDeveloperSettings* PluginSettings = GetDefault<UDebugPrintDeveloperSettings>();
-    
+
     // Create Exec pins
     CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Exec, UEdGraphSchema_K2::PN_Execute);
     CreatePin(EGPD_Output, UEdGraphSchema_K2::PC_Exec, UEdGraphSchema_K2::PN_Then);
-    
+
     // Create Value Wildcard Pins
     for (int32 i = 0; i < ValueLabels.Num(); ++i)
     {
@@ -112,7 +89,8 @@ void UK2Node_DebugPrint::AllocateDefaultPins()
     UEdGraphPin* KeyPin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Name, TEXT("Key"));
     KeyPin->bAdvancedView = true;
     KeyPin->DefaultValue = TEXT("None");
-    KeyPin->PinToolTip = TEXT("If a non-empty key is provided, the message will replace any existing on-screen messages with the same key.");
+    KeyPin->PinToolTip =
+        TEXT("If a non-empty key is provided, the message will replace any existing on-screen messages with the same key.");
 
     UEdGraphPin* SeparatorPin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_String, TEXT("Separator"));
     SeparatorPin->bAdvancedView = true;
@@ -136,14 +114,13 @@ void UK2Node_DebugPrint::AllocateDefaultPins()
     PrintTypePin->DefaultValue = StaticEnum<EPrintType>()->GetNameStringByValue(PluginSettings->PrintType);
 
     // Hiding Advanced pins
-    if (AdvancedPinDisplay == ENodeAdvancedPins::NoPins)
-        AdvancedPinDisplay = ENodeAdvancedPins::Hidden;
+    if (AdvancedPinDisplay == ENodeAdvancedPins::NoPins) AdvancedPinDisplay = ENodeAdvancedPins::Hidden;
     Super::AllocateDefaultPins();
 }
 
 void UK2Node_DebugPrint::NodeConnectionListChanged()
 {
-    // Refresh to remove disconnected pins 
+    // Refresh to remove disconnected pins
     ReconstructNode();
 }
 
@@ -159,12 +136,13 @@ void UK2Node_DebugPrint::ExpandNode(class FKismetCompilerContext& CompilerContex
     TArray<UEdGraphPin*> ValuePins = GetValuePins();
     MakeArrayNode->NumInputs = ValuePins.Num();
     MakeArrayNode->AllocateDefaultPins();
-    
+
     // 2. Create a temporary node for the ArrayDebugPrint function
     UK2Node_CallFunction* DebugPrintNode = CompilerContext.SpawnIntermediateNode<UK2Node_CallFunction>(this, SourceGraph);
-    DebugPrintNode->FunctionReference.SetExternalMember(GET_FUNCTION_NAME_CHECKED(UK2Node_DebugPrint, ArrayDebugPrint), UK2Node_DebugPrint::StaticClass());
+    DebugPrintNode->FunctionReference.SetExternalMember(
+        GET_FUNCTION_NAME_CHECKED(UK2Node_DebugPrint, ArrayDebugPrint), UK2Node_DebugPrint::StaticClass());
     DebugPrintNode->AllocateDefaultPins();
-    
+
     // 3. Get pins from the ArrayDebugPrint function
     UEdGraphPin* ValuesPin = DebugPrintNode->FindPin(TEXT("Values"));
     UEdGraphPin* KeyPin = DebugPrintNode->FindPin(TEXT("Key"));
@@ -177,7 +155,7 @@ void UK2Node_DebugPrint::ExpandNode(class FKismetCompilerContext& CompilerContex
 
     // 4. Connect the result pin of MakeArray to the Values pin
     bIsErrorFree &= Schema->TryCreateConnection(MakeArrayNode->GetOutputPin(), ValuesPin);
-    
+
     // 5. Connect the value pins to the MakeArray pins
     TArray<UEdGraphPin*> MakeArrayPins;
     TArray<UEdGraphPin*> MakeArrayOutputPins;
@@ -201,30 +179,30 @@ void UK2Node_DebugPrint::ExpandNode(class FKismetCompilerContext& CompilerContex
 
     // Set the NodeGUID as the default value for the corresponding pin
     NodeGuidPin->DefaultValue = NodeGuid.ToString();
-    
+
     FString SourceValueLabels = "";
     for (int32 i = 0; i < ValueLabels.Num(); ++i)
     {
         SourceValueLabels += ValueLabels[i] == "" ? FString::Printf(TEXT("Value %d"), i) : ValueLabels[i];
         SourceValueLabels += "#";
     }
-    
+
     SourceValueLabelsPin->DefaultValue = SourceValueLabels;
-    
+
     if (!bIsErrorFree)
     {
-        CompilerContext.MessageLog.Error(*LOCTEXT("InternalConnectionError", "IsValidNode: Internal connection error. @@").ToString(), this);
+        CompilerContext.MessageLog.Error(
+            *LOCTEXT("InternalConnectionError", "IsValidNode: Internal connection error. @@").ToString(), this);
     }
-    
+
     BreakAllNodeLinks();
 }
 
 void UK2Node_DebugPrint::NotifyPinConnectionListChanged(UEdGraphPin* Pin)
 {
-    if (GetValuePins().Contains((Pin))) 
+    if (GetValuePins().Contains((Pin)))
     {
-        if (Pin->LinkedTo.Num() == 0)
-            RemoveInputPin(Pin);
+        if (Pin->LinkedTo.Num() == 0) RemoveInputPin(Pin);
     }
 }
 
@@ -238,17 +216,16 @@ void UK2Node_DebugPrint::RemoveInputPin(UEdGraphPin* PinToRemove)
 
     // Open a transaction to support undo/redo
     Modify();
-    
+
     // Update the number of pins and remove the corresponding label
     int32 Index = ValuePins.Find(PinToRemove);
-    
+
     // Remove the pin from the array
     Pins.Remove(PinToRemove);
     ValuePins = GetValuePins();
-    
-    if (ValueLabels.IsValidIndex(Index))
-        ValueLabels.RemoveAt(Index);
-    
+
+    if (ValueLabels.IsValidIndex(Index)) ValueLabels.RemoveAt(Index);
+
     // Recalculate the names of the remaining pins
     Index = 0;
     for (UEdGraphPin* Pin : ValuePins)
@@ -258,7 +235,7 @@ void UK2Node_DebugPrint::RemoveInputPin(UEdGraphPin* PinToRemove)
         Pin->PinName = FName(*FString::Printf(TEXT("Value_%d"), Index));
         Index++;
     }
-    
+
     // Notify the Blueprint that the node has changed
     FBlueprintEditorUtils::MarkBlueprintAsModified(GetBlueprint());
 }
@@ -266,7 +243,7 @@ void UK2Node_DebugPrint::RemoveInputPin(UEdGraphPin* PinToRemove)
 void UK2Node_DebugPrint::ReallocatePinsDuringReconstruction(TArray<UEdGraphPin*>& OldPins)
 {
     Super::ReallocatePinsDuringReconstruction(OldPins);
-    
+
     // Restore the old pins and their types
     for (UEdGraphPin* OldPin : OldPins)
     {
@@ -282,7 +259,7 @@ void UK2Node_DebugPrint::ReallocatePinsDuringReconstruction(TArray<UEdGraphPin*>
 void UK2Node_DebugPrint::PostReconstructNode()
 {
     Super::PostReconstructNode();
-    
+
     // Restore pin types based on existing connections
     for (UEdGraphPin* Pin : Pins)
     {
@@ -305,8 +282,8 @@ UEdGraphPin* UK2Node_DebugPrint::CreatePinFromUserDefinition(const TSharedPtr<FU
     return NewPin;
 }
 
-bool UK2Node_DebugPrint::CanCreateUserDefinedPin(const FEdGraphPinType& InPinType,
-    EEdGraphPinDirection InDesiredDirection, FText& OutErrorMessage)
+bool UK2Node_DebugPrint::CanCreateUserDefinedPin(
+    const FEdGraphPinType& InPinType, EEdGraphPinDirection InDesiredDirection, FText& OutErrorMessage)
 {
     // Disallow Output pins
     if (InDesiredDirection == EGPD_Output)
@@ -321,7 +298,7 @@ bool UK2Node_DebugPrint::CanCreateUserDefinedPin(const FEdGraphPinType& InPinTyp
         OutErrorMessage = LOCTEXT("ExecPinNotAllowed", "Cannot add Exec pins!");
         return false;
     }
-        
+
     // Disallow Map, Array, and Set container pins
     if (InPinType.IsContainer())
     {
@@ -359,13 +336,9 @@ void UK2Node_DebugPrint::GetNodeContextMenuActions(UToolMenu* Menu, UGraphNodeCo
     {
         // Adding a new section for the "Add String Pin" option
         FToolMenuSection& Section = Menu->AddSection("K2NodeDebugPrintAddPin", LOCTEXT("AddPinHeader", "Add Pin"));
-        Section.AddMenuEntry(
-            "AddStringPin",
-            LOCTEXT("AddStringPin", "Add String Pin"),
-            LOCTEXT("AddStringPinTooltip", "Add a new String pin to the node."),
-            FSlateIcon(),
-            FUIAction(FExecuteAction::CreateUObject(const_cast<UK2Node_DebugPrint*>(this), &UK2Node_DebugPrint::AddStringPin))
-        );
+        Section.AddMenuEntry("AddStringPin", LOCTEXT("AddStringPin", "Add String Pin"),
+            LOCTEXT("AddStringPinTooltip", "Add a new String pin to the node."), FSlateIcon(),
+            FUIAction(FExecuteAction::CreateUObject(const_cast<UK2Node_DebugPrint*>(this), &UK2Node_DebugPrint::AddStringPin)));
     }
 
     // Check if the pin is a value pin (starting with "Value_")
@@ -378,19 +351,17 @@ void UK2Node_DebugPrint::GetNodeContextMenuActions(UToolMenu* Menu, UGraphNodeCo
         //     LOCTEXT("RemovePin", "Remove Pin"),
         //     LOCTEXT("RemovePinTooltip", "Remove this input pin."),
         //     FSlateIcon(),
-        //     FUIAction(FExecuteAction::CreateUObject(const_cast<UK2Node_DebugPrint*>(this), &UK2Node_DebugPrint::RemoveInputPin, const_cast<UEdGraphPin*>(Context->Pin)))
+        //     FUIAction(FExecuteAction::CreateUObject(const_cast<UK2Node_DebugPrint*>(this), &UK2Node_DebugPrint::RemoveInputPin,
+        //     const_cast<UEdGraphPin*>(Context->Pin)))
         // );
 
         // Add the "Reset to Wildcard" option if the pin is not connected and not already a wildcard
         if (Context->Pin->LinkedTo.Num() == 0 && Context->Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Wildcard)
         {
-            Section.AddMenuEntry(
-                "ResetPinToWildcard",
-                LOCTEXT("ResetPinToWildcard", "Reset pin to Wildcard"),
-                LOCTEXT("ResetPinToWildcardTooltip", "Reset this pin's type to Wildcard."),
-                FSlateIcon(),
-                FUIAction(FExecuteAction::CreateUObject(const_cast<UK2Node_DebugPrint*>(this), &UK2Node_DebugPrint::ResetPinToWildcard, const_cast<UEdGraphPin*>(Context->Pin)))
-            );
+            Section.AddMenuEntry("ResetPinToWildcard", LOCTEXT("ResetPinToWildcard", "Reset pin to Wildcard"),
+                LOCTEXT("ResetPinToWildcardTooltip", "Reset this pin's type to Wildcard."), FSlateIcon(),
+                FUIAction(FExecuteAction::CreateUObject(const_cast<UK2Node_DebugPrint*>(this), &UK2Node_DebugPrint::ResetPinToWildcard,
+                    const_cast<UEdGraphPin*>(Context->Pin))));
         }
     }
 }
@@ -407,7 +378,7 @@ void UK2Node_DebugPrint::ResetPinToWildcard(UEdGraphPin* PinToReset)
     Modify();
 
     const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
-    
+
     // If the pin is a child, it needs to be recombined
     UEdGraphPin* ParentPin = PinToReset->ParentPin ? PinToReset->ParentPin : PinToReset;
     Schema->RecombinePin(PinToReset);
@@ -427,7 +398,7 @@ void UK2Node_DebugPrint::ResetPinToWildcard(UEdGraphPin* PinToReset)
 
 void UK2Node_DebugPrint::AddStringPin()
 {
-    Modify(); // Begin a transaction to support Undo/Redo
+    Modify();  // Begin a transaction to support Undo/Redo
 
     int32 Index = GetValuePins().Num();
     FString NewPinLabel = TEXT("1");
@@ -438,10 +409,10 @@ void UK2Node_DebugPrint::AddStringPin()
     // Create a new pin of type String
     UEdGraphPin* StringPin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_String, NewPinName);
     StringPin->DefaultValue = TEXT("Section");
-    
+
     // Rebuild the node after adding a new pin
     ReconstructNode();
-    
+
     // Refresh the graph to reflect the changes in the editor
     GetGraph()->NotifyGraphChanged();
 }
@@ -453,39 +424,66 @@ void UK2Node_DebugPrint::PostEditChangeProperty(struct FPropertyChangedEvent& Pr
     FName PropertyName = (PropertyChangedEvent.Property != nullptr) ? PropertyChangedEvent.Property->GetFName() : NAME_None;
     if (PropertyName == TEXT("ValueLabels"))
     {
-        OnValueLabelsChange();
-        ReconstructNode();
-        GetGraph()->NotifyNodeChanged(this);
+        // Handle array changes safely
+        if (PropertyChangedEvent.ChangeType == EPropertyChangeType::ArrayAdd ||
+            PropertyChangedEvent.ChangeType == EPropertyChangeType::ArrayRemove ||
+            PropertyChangedEvent.ChangeType == EPropertyChangeType::ValueSet)
+        {
+            OnValueLabelsChange();
+            ReconstructNode();
+            GetGraph()->NotifyNodeChanged(this);
+        }
     }
-    
+
     Super::PostEditChangeProperty(PropertyChangedEvent);
 }
 
 void UK2Node_DebugPrint::OnValueLabelsChange()
 {
     TArray<UEdGraphPin*> ValuePins = GetValuePins();
-    
+
+    // Ensure ValueLabels array has valid entries
     for (int32 Index = 0; Index < ValueLabels.Num(); ++Index)
     {
-        if (ValueLabels[Index] == "")
-            ValueLabels[Index] = FString::Printf(TEXT("[%d]"), Index);
+        if (ValueLabels[Index] == "") ValueLabels[Index] = FString::Printf(TEXT("[%d]"), Index);
     }
     MakeLabelsUnique();
 
-    // Iterate through each pin
-    for (UEdGraphPin* Pin : ValuePins)
+    // If ValueLabels array has grown, we need to create new pins
+    if (ValueLabels.Num() > ValuePins.Num())
     {
-        // Find the corresponding label in the ValueLabels array
-        int32 LabelIndex = ValueLabels.IndexOfByKey(Pin->PinFriendlyName.ToString());
-
-        // If a match is found
-        if (LabelIndex != INDEX_NONE)
+        // Create new pins for the additional labels
+        for (int32 Index = ValuePins.Num(); Index < ValueLabels.Num(); ++Index)
         {
-            Pin->PinName = FName(*FString::Printf(TEXT("Value_%d"), LabelIndex));
+            FName PinName = FName(*FString::Printf(TEXT("Value_%d"), Index));
+            UEdGraphPin* NewPin = CreatePin(EGPD_Input, UEdGraphSchema_K2::PC_Wildcard, PinName);
+            NewPin->PinToolTip = TEXT("Wildcard input pin. Type will be determined by what is connected.");
+            NewPin->PinFriendlyName = FText::FromString(ValueLabels[Index]);
+        }
+    }
+    // If ValueLabels array has shrunk, remove excess pins
+    else if (ValueLabels.Num() < ValuePins.Num())
+    {
+        for (int32 Index = ValueLabels.Num(); Index < ValuePins.Num(); ++Index)
+        {
+            UEdGraphPin* PinToRemove = ValuePins[Index];
+            if (PinToRemove)
+            {
+                Pins.Remove(PinToRemove);
+            }
         }
     }
 
-    ValuePins[0]->PinName;
+    // Update existing pins with new friendly names
+    ValuePins = GetValuePins();
+    for (int32 Index = 0; Index < FMath::Min(ValueLabels.Num(), ValuePins.Num()); ++Index)
+    {
+        if (ValuePins[Index])
+        {
+            ValuePins[Index]->PinFriendlyName = FText::FromString(ValueLabels[Index]);
+            ValuePins[Index]->PinName = FName(*FString::Printf(TEXT("Value_%d"), Index));
+        }
+    }
 
     ReconstructNode();
 }
@@ -503,7 +501,7 @@ void UK2Node_DebugPrint::MakeLabelsUnique()
         if (LabelsSet.Contains(CurrentString))
         {
             int32 LabelNumber;
-            FString LabelString; 
+            FString LabelString;
             SplitStringAndNumber(CurrentString, LabelString, LabelNumber);
             LabelNumber = LabelNumber == INDEX_NONE ? 1 : LabelNumber + 1;
             ValueLabels[i] = FString::Printf(TEXT("%s%d"), *LabelString, LabelNumber);
@@ -517,8 +515,8 @@ void UK2Node_DebugPrint::MakeLabelsUnique()
 void UK2Node_DebugPrint::SplitStringAndNumber(const FString& InputString, FString& OutString, int32& OutNumber)
 {
     // Initialize output variables
-    OutNumber = INDEX_NONE;  // indicates no number found
-    OutString = InputString; // Default to returning the entire input string
+    OutNumber = INDEX_NONE;   // indicates no number found
+    OutString = InputString;  // Default to returning the entire input string
 
     // Traverse the string from the end to find a sequence of digits
     int32 Index = InputString.Len() - 1;
@@ -533,10 +531,10 @@ void UK2Node_DebugPrint::SplitStringAndNumber(const FString& InputString, FStrin
     {
         // Extract the numeric part
         FString NumberPart = InputString.Mid(Index + 1);
-        OutNumber = FCString::Atoi(*NumberPart); // Convert the numeric part to an integer
+        OutNumber = FCString::Atoi(*NumberPart);  // Convert the numeric part to an integer
 
         // Extract the remaining non-numeric part of the string
-        OutString = InputString.Left(Index + 1); // Get the part of the string without the numeric portion
+        OutString = InputString.Left(Index + 1);  // Get the part of the string without the numeric portion
     }
 }
 
