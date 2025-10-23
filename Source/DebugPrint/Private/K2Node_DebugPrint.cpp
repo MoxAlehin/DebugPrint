@@ -401,7 +401,7 @@ void UK2Node_DebugPrint::AddStringPin()
     Modify();  // Begin a transaction to support Undo/Redo
 
     int32 Index = GetValuePins().Num();
-    FString NewPinLabel = TEXT("1");
+    FString NewPinLabel = FString::Printf(TEXT("%d"), Index);
     FName NewPinName = FName(*FString::Printf(TEXT("Value_%d"), Index));
     ValueLabels.Add(NewPinLabel);
     MakeLabelsUnique();
@@ -445,7 +445,7 @@ void UK2Node_DebugPrint::OnValueLabelsChange()
     // Ensure ValueLabels array has valid entries
     for (int32 Index = 0; Index < ValueLabels.Num(); ++Index)
     {
-        if (ValueLabels[Index] == "") ValueLabels[Index] = FString::Printf(TEXT("[%d]"), Index);
+        if (ValueLabels[Index] == "") ValueLabels[Index] = FString::Printf(TEXT("%d"), Index);
     }
     MakeLabelsUnique();
 
