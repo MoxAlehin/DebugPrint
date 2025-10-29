@@ -3,6 +3,7 @@
 #include "K2Node_DebugPrint.h"
 
 #include "BlueprintNodeSpawner.h"
+#include "EdGraph/EdGraphNode.h"
 #include "EdGraphSchema_K2.h"
 #include "EditorCategoryUtils.h"
 #include "BlueprintActionDatabaseRegistrar.h"
@@ -198,11 +199,85 @@ void UK2Node_DebugPrint::ExpandNode(class FKismetCompilerContext& CompilerContex
     BreakAllNodeLinks();
 }
 
+FString UK2Node_DebugPrint::GetSmartLabelFromPin(UEdGraphPin* Pin) const
+{
+    if (!Pin || Pin->LinkedTo.Num() == 0)
+    {
+        return TEXT("");
+    }
+
+    // Get the pin from the source node
+    UEdGraphPin* SourcePin = Pin->LinkedTo[0];
+    FString PinLabel =
+        SourcePin->PinFriendlyName.IsEmpty() ? SourcePin->GetDisplayName().ToString() : SourcePin->PinFriendlyName.ToString();
+
+    // Check if pin label is "Return Value" or empty
+    if (PinLabel == TEXT("Return Value") || PinLabel.IsEmpty())
+    {
+        // Get the source node
+        UEdGraphNode* SourceNode = SourcePin->GetOwningNode();
+        if (SourceNode)
+        {
+            // Get the node title
+            FString NodeTitle = SourceNode->GetNodeTitle(ENodeTitleType::MenuTitle).ToString();
+
+            // Remove "Get " prefix if present
+            if (NodeTitle.StartsWith(TEXT("Get ")))
+            {
+                NodeTitle.RightChopInline(4);  // Remove "Get "
+            }
+            else if (NodeTitle.Len() > 3 && NodeTitle.StartsWith(TEXT("Get")))
+            {
+                // Check for "Get" prefix without space (e.g., "GetParam")
+                FString AfterGet = NodeTitle.Mid(3);
+                // If the next character is uppercase or the rest is empty, remove "Get"
+                if (AfterGet.Len() == 0 || FChar::IsUpper(AfterGet[0]))
+                {
+                    NodeTitle = AfterGet;
+                }
+            }
+
+            // Return the processed node title
+            return NodeTitle;
+        }
+    }
+
+    return PinLabel;
+}
+
 void UK2Node_DebugPrint::NotifyPinConnectionListChanged(UEdGraphPin* Pin)
 {
     if (GetValuePins().Contains((Pin)))
     {
-        if (Pin->LinkedTo.Num() == 0) RemoveInputPin(Pin);
+        if (Pin->LinkedTo.Num() == 0)
+        {
+            RemoveInputPin(Pin);
+        }
+        else
+        {
+            // When a pin is connected, update its label with smart label from source
+            Modify();
+
+            // Get the smart label from the connected pin
+            FString NewLabel = GetSmartLabelFromPin(Pin);
+
+            if (!NewLabel.IsEmpty())
+            {
+                // Find the index of this pin
+                TArray<UEdGraphPin*> ValuePins = GetValuePins();
+                int32 Index = ValuePins.Find(Pin);
+
+                if (ValueLabels.IsValidIndex(Index) && NewLabel != ValueLabels[Index])
+                {
+                    ValueLabels[Index] = NewLabel;
+                    MakeLabelsUnique();
+                    ValueLabels[Index] = ValueLabels[Index];  // Update with unique version
+                    Pin->PinFriendlyName = FText::FromString(ValueLabels[Index]);
+
+                    FBlueprintEditorUtils::MarkBlueprintAsModified(GetBlueprint());
+                }
+            }
+        }
     }
 }
 
@@ -260,12 +335,41 @@ void UK2Node_DebugPrint::PostReconstructNode()
 {
     Super::PostReconstructNode();
 
-    // Restore pin types based on existing connections
-    for (UEdGraphPin* Pin : Pins)
+    // Restore pin types and smart labels based on existing connections
+    bool bModified = false;
+    TArray<UEdGraphPin*> ValuePins = GetValuePins();
+
+    for (int32 i = 0; i < ValuePins.Num() && i < ValueLabels.Num(); ++i)
     {
+        UEdGraphPin* Pin = ValuePins[i];
+
+        // Restore pin types based on existing connections
         if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Wildcard && Pin->LinkedTo.Num() > 0)
         {
             Pin->PinType = Pin->LinkedTo[0]->PinType;
+        }
+
+        // Update label with smart label from connected pin if needed
+        if (Pin->LinkedTo.Num() > 0)
+        {
+            FString SmartLabel = GetSmartLabelFromPin(Pin);
+            if (!SmartLabel.IsEmpty() && SmartLabel != ValueLabels[i])
+            {
+                ValueLabels[i] = SmartLabel;
+                bModified = true;
+            }
+        }
+    }
+
+    // Make labels unique if we made changes
+    if (bModified)
+    {
+        MakeLabelsUnique();
+
+        // Update PinFriendlyNames
+        for (int32 i = 0; i < ValuePins.Num() && i < ValueLabels.Num(); ++i)
+        {
+            ValuePins[i]->PinFriendlyName = FText::FromString(ValueLabels[i]);
         }
     }
 }
