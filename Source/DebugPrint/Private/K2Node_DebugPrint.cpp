@@ -258,24 +258,21 @@ void UK2Node_DebugPrint::NotifyPinConnectionListChanged(UEdGraphPin* Pin)
             // When a pin is connected, update its label with smart label from source
             Modify();
 
+            // Find the index of this pin
+            TArray<UEdGraphPin*> ValuePins = GetValuePins();
+            int32 Index = ValuePins.Find(Pin);
+
             // Get the smart label from the connected pin
             FString NewLabel = GetSmartLabelFromPin(Pin);
 
-            if (!NewLabel.IsEmpty())
+            if (!NewLabel.IsEmpty() && ValueLabels.IsValidIndex(Index) && NewLabel != ValueLabels[Index])
             {
-                // Find the index of this pin
-                TArray<UEdGraphPin*> ValuePins = GetValuePins();
-                int32 Index = ValuePins.Find(Pin);
+                ValueLabels[Index] = NewLabel;
+                MakeLabelsUnique();
+                ValueLabels[Index] = ValueLabels[Index];  // Update with unique version
+                Pin->PinFriendlyName = FText::FromString(ValueLabels[Index]);
 
-                if (ValueLabels.IsValidIndex(Index) && NewLabel != ValueLabels[Index])
-                {
-                    ValueLabels[Index] = NewLabel;
-                    MakeLabelsUnique();
-                    ValueLabels[Index] = ValueLabels[Index];  // Update with unique version
-                    Pin->PinFriendlyName = FText::FromString(ValueLabels[Index]);
-
-                    FBlueprintEditorUtils::MarkBlueprintAsModified(GetBlueprint());
-                }
+                FBlueprintEditorUtils::MarkBlueprintAsModified(GetBlueprint());
             }
         }
     }
@@ -335,41 +332,15 @@ void UK2Node_DebugPrint::PostReconstructNode()
 {
     Super::PostReconstructNode();
 
-    // Restore pin types and smart labels based on existing connections
-    bool bModified = false;
+    // Restore pin types based on existing connections
     TArray<UEdGraphPin*> ValuePins = GetValuePins();
 
-    for (int32 i = 0; i < ValuePins.Num() && i < ValueLabels.Num(); ++i)
+    for (UEdGraphPin* Pin : ValuePins)
     {
-        UEdGraphPin* Pin = ValuePins[i];
-
         // Restore pin types based on existing connections
         if (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Wildcard && Pin->LinkedTo.Num() > 0)
         {
             Pin->PinType = Pin->LinkedTo[0]->PinType;
-        }
-
-        // Update label with smart label from connected pin if needed
-        if (Pin->LinkedTo.Num() > 0)
-        {
-            FString SmartLabel = GetSmartLabelFromPin(Pin);
-            if (!SmartLabel.IsEmpty() && SmartLabel != ValueLabels[i])
-            {
-                ValueLabels[i] = SmartLabel;
-                bModified = true;
-            }
-        }
-    }
-
-    // Make labels unique if we made changes
-    if (bModified)
-    {
-        MakeLabelsUnique();
-
-        // Update PinFriendlyNames
-        for (int32 i = 0; i < ValuePins.Num() && i < ValueLabels.Num(); ++i)
-        {
-            ValuePins[i]->PinFriendlyName = FText::FromString(ValueLabels[i]);
         }
     }
 }
